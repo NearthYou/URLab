@@ -1,0 +1,554 @@
+{
+  "schema_version": 1,
+  "episode_count": 23,
+  "valid_episode_count": 23,
+  "error_count": 0,
+  "warning_count": 0,
+  "modes": {
+    "bot": 20,
+    "input-replay": 3
+  },
+  "outcomes": {
+    "goal": 20,
+    "replay_source_end": 3
+  },
+  "total_bytes": 39678350,
+  "missing_capture_frames": 0,
+  "capture_dropped": 0,
+  "seed_reproducibility": {
+    "1000": {
+      "episodes": 3,
+      "course_hash_match": true
+    },
+    "1001": {
+      "episodes": 3,
+      "course_hash_match": true
+    },
+    "1002": {
+      "episodes": 3,
+      "course_hash_match": true
+    },
+    "1003": {
+      "episodes": 2,
+      "course_hash_match": true
+    },
+    "1004": {
+      "episodes": 2,
+      "course_hash_match": true
+    },
+    "1005": {
+      "episodes": 2,
+      "course_hash_match": true
+    },
+    "1006": {
+      "episodes": 2,
+      "course_hash_match": true
+    },
+    "1007": {
+      "episodes": 2,
+      "course_hash_match": true
+    },
+    "1008": {
+      "episodes": 2,
+      "course_hash_match": true
+    },
+    "1009": {
+      "episodes": 2,
+      "course_hash_match": true
+    }
+  },
+  "replay_comparisons": [
+    {
+      "original_episode_id": "episode_20260730T164634194Z_bot_s1000_00",
+      "replayed_episode_id": "episode_20260730T165021898Z_input-replay_s1000_00",
+      "seed": 1000,
+      "shared_frames": 165,
+      "seed_match": true,
+      "parent_episode_match": true,
+      "frame_alignment_match": true,
+      "course_hash_match": true,
+      "start_position_error_cm": 0.0,
+      "mean_position_error_cm": 0.0,
+      "p95_position_error_cm": 0.0,
+      "max_position_error_cm": 0.0,
+      "final_position_error_cm": 0.0,
+      "within_target": true,
+      "targets_cm": {
+        "mean": 10.0,
+        "p95": 25.0,
+        "final": 50.0,
+        "start": 0.1
+      }
+    },
+    {
+      "original_episode_id": "episode_20260730T164641344Z_bot_s1001_01",
+      "replayed_episode_id": "episode_20260730T165047652Z_input-replay_s1001_00",
+      "seed": 1001,
+      "shared_frames": 165,
+      "seed_match": true,
+      "parent_episode_match": true,
+      "frame_alignment_match": true,
+      "course_hash_match": true,
+      "start_position_error_cm": 0.0,
+      "mean_position_error_cm": 0.0,
+      "p95_position_error_cm": 0.0,
+      "max_position_error_cm": 0.0,
+      "final_position_error_cm": 0.0,
+      "within_target": true,
+      "targets_cm": {
+        "mean": 10.0,
+        "p95": 25.0,
+        "final": 50.0,
+        "start": 0.1
+      }
+    },
+    {
+      "original_episode_id": "episode_20260730T164648592Z_bot_s1002_02",
+      "replayed_episode_id": "episode_20260730T165115218Z_input-replay_s1002_00",
+      "seed": 1002,
+      "shared_frames": 165,
+      "seed_match": true,
+      "parent_episode_match": true,
+      "frame_alignment_match": true,
+      "course_hash_match": true,
+      "start_position_error_cm": 0.0,
+      "mean_position_error_cm": 0.0,
+      "p95_position_error_cm": 0.0,
+      "max_position_error_cm": 0.0,
+      "final_position_error_cm": 0.0,
+      "within_target": true,
+      "targets_cm": {
+        "mean": 10.0,
+        "p95": 25.0,
+        "final": 50.0,
+        "start": 0.1
+      }
+    }
+  ],
+  "action_metrics": {
+    "bot": {
+      "move_magnitude": {
+        "count": 3300,
+        "mean": 1.0,
+        "p50": 1.0,
+        "p95": 1.0000000000000002
+      },
+      "look_magnitude": {
+        "count": 3300,
+        "mean": 0.8010926248499525,
+        "p50": 0.49224928085891634,
+        "p95": 2.0
+      },
+      "jump_rate": 0.06666666666666667,
+      "collision_rate": 0.006060606060606061
+    },
+    "input-replay": {
+      "move_magnitude": {
+        "count": 495,
+        "mean": 1.0,
+        "p50": 1.0,
+        "p95": 1.0000000000000002
+      },
+      "look_magnitude": {
+        "count": 495,
+        "mean": 0.8008915530513201,
+        "p50": 0.5028152962568673,
+        "p95": 2.0
+      },
+      "jump_rate": 0.06666666666666667,
+      "collision_rate": 0.006060606060606061
+    }
+  },
+  "performance": {
+    "capture_on_ms": {
+      "count": 1650,
+      "mean": 37.415768906022564,
+      "p50": 36.10505163669586,
+      "p95": 45.42424809187651
+    },
+    "capture_off_ms": {
+      "count": 1650,
+      "mean": 37.91249333909064,
+      "p50": 36.6185512393713,
+      "p95": 46.00058663636446
+    },
+    "median_fps_drop_percent": -1.4222375523582853
+  },
+  "plots": [
+    "episode_sizes.png",
+    "episode_outcomes.png",
+    "action_distributions.png",
+    "replay_error.png",
+    "capture_performance.png"
+  ],
+  "episodes": [
+    {
+      "episode_id": "episode_20260730T164634194Z_bot_s1000_00",
+      "mode": "bot",
+      "seed": 1000,
+      "course_hash": "2960b24b",
+      "end_reason": "goal",
+      "complete": true,
+      "trajectory_frames": 165,
+      "capture_frames": 55,
+      "capture_dropped": 0,
+      "missing_capture_frames": 0,
+      "file_count": 113,
+      "total_bytes": 3820615,
+      "errors": [],
+      "warnings": []
+    },
+    {
+      "episode_id": "episode_20260730T164641344Z_bot_s1001_01",
+      "mode": "bot",
+      "seed": 1001,
+      "course_hash": "774d4473",
+      "end_reason": "goal",
+      "complete": true,
+      "trajectory_frames": 165,
+      "capture_frames": 55,
+      "capture_dropped": 0,
+      "missing_capture_frames": 0,
+      "file_count": 113,
+      "total_bytes": 3816187,
+      "errors": [],
+      "warnings": []
+    },
+    {
+      "episode_id": "episode_20260730T164648592Z_bot_s1002_02",
+      "mode": "bot",
+      "seed": 1002,
+      "course_hash": "a4d77c48",
+      "end_reason": "goal",
+      "complete": true,
+      "trajectory_frames": 165,
+      "capture_frames": 55,
+      "capture_dropped": 0,
+      "missing_capture_frames": 0,
+      "file_count": 113,
+      "total_bytes": 3819667,
+      "errors": [],
+      "warnings": []
+    },
+    {
+      "episode_id": "episode_20260730T164655604Z_bot_s1003_03",
+      "mode": "bot",
+      "seed": 1003,
+      "course_hash": "b2667db1",
+      "end_reason": "goal",
+      "complete": true,
+      "trajectory_frames": 165,
+      "capture_frames": 55,
+      "capture_dropped": 0,
+      "missing_capture_frames": 0,
+      "file_count": 113,
+      "total_bytes": 3821259,
+      "errors": [],
+      "warnings": []
+    },
+    {
+      "episode_id": "episode_20260730T164702745Z_bot_s1004_04",
+      "mode": "bot",
+      "seed": 1004,
+      "course_hash": "40bd447f",
+      "end_reason": "goal",
+      "complete": true,
+      "trajectory_frames": 165,
+      "capture_frames": 55,
+      "capture_dropped": 0,
+      "missing_capture_frames": 0,
+      "file_count": 113,
+      "total_bytes": 3824031,
+      "errors": [],
+      "warnings": []
+    },
+    {
+      "episode_id": "episode_20260730T164709878Z_bot_s1005_05",
+      "mode": "bot",
+      "seed": 1005,
+      "course_hash": "272660de",
+      "end_reason": "goal",
+      "complete": true,
+      "trajectory_frames": 165,
+      "capture_frames": 55,
+      "capture_dropped": 0,
+      "missing_capture_frames": 0,
+      "file_count": 113,
+      "total_bytes": 3823657,
+      "errors": [],
+      "warnings": []
+    },
+    {
+      "episode_id": "episode_20260730T164716899Z_bot_s1006_06",
+      "mode": "bot",
+      "seed": 1006,
+      "course_hash": "94738101",
+      "end_reason": "goal",
+      "complete": true,
+      "trajectory_frames": 165,
+      "capture_frames": 55,
+      "capture_dropped": 0,
+      "missing_capture_frames": 0,
+      "file_count": 113,
+      "total_bytes": 3833928,
+      "errors": [],
+      "warnings": []
+    },
+    {
+      "episode_id": "episode_20260730T164723940Z_bot_s1007_07",
+      "mode": "bot",
+      "seed": 1007,
+      "course_hash": "ac1b1c8d",
+      "end_reason": "goal",
+      "complete": true,
+      "trajectory_frames": 165,
+      "capture_frames": 55,
+      "capture_dropped": 0,
+      "missing_capture_frames": 0,
+      "file_count": 113,
+      "total_bytes": 3815056,
+      "errors": [],
+      "warnings": []
+    },
+    {
+      "episode_id": "episode_20260730T164731160Z_bot_s1008_08",
+      "mode": "bot",
+      "seed": 1008,
+      "course_hash": "614a3567",
+      "end_reason": "goal",
+      "complete": true,
+      "trajectory_frames": 165,
+      "capture_frames": 55,
+      "capture_dropped": 0,
+      "missing_capture_frames": 0,
+      "file_count": 113,
+      "total_bytes": 3828004,
+      "errors": [],
+      "warnings": []
+    },
+    {
+      "episode_id": "episode_20260730T164738287Z_bot_s1009_09",
+      "mode": "bot",
+      "seed": 1009,
+      "course_hash": "6c4be4e7",
+      "end_reason": "goal",
+      "complete": true,
+      "trajectory_frames": 165,
+      "capture_frames": 55,
+      "capture_dropped": 0,
+      "missing_capture_frames": 0,
+      "file_count": 113,
+      "total_bytes": 3815727,
+      "errors": [],
+      "warnings": []
+    },
+    {
+      "episode_id": "episode_20260730T164830642Z_bot_s1000_00",
+      "mode": "bot",
+      "seed": 1000,
+      "course_hash": "2960b24b",
+      "end_reason": "goal",
+      "complete": true,
+      "trajectory_frames": 165,
+      "capture_frames": 0,
+      "capture_dropped": 0,
+      "missing_capture_frames": 0,
+      "file_count": 3,
+      "total_bytes": 112174,
+      "errors": [],
+      "warnings": []
+    },
+    {
+      "episode_id": "episode_20260730T164837783Z_bot_s1001_01",
+      "mode": "bot",
+      "seed": 1001,
+      "course_hash": "774d4473",
+      "end_reason": "goal",
+      "complete": true,
+      "trajectory_frames": 165,
+      "capture_frames": 0,
+      "capture_dropped": 0,
+      "missing_capture_frames": 0,
+      "file_count": 3,
+      "total_bytes": 112327,
+      "errors": [],
+      "warnings": []
+    },
+    {
+      "episode_id": "episode_20260730T164844831Z_bot_s1002_02",
+      "mode": "bot",
+      "seed": 1002,
+      "course_hash": "a4d77c48",
+      "end_reason": "goal",
+      "complete": true,
+      "trajectory_frames": 165,
+      "capture_frames": 0,
+      "capture_dropped": 0,
+      "missing_capture_frames": 0,
+      "file_count": 3,
+      "total_bytes": 112338,
+      "errors": [],
+      "warnings": []
+    },
+    {
+      "episode_id": "episode_20260730T164851990Z_bot_s1003_03",
+      "mode": "bot",
+      "seed": 1003,
+      "course_hash": "b2667db1",
+      "end_reason": "goal",
+      "complete": true,
+      "trajectory_frames": 165,
+      "capture_frames": 0,
+      "capture_dropped": 0,
+      "missing_capture_frames": 0,
+      "file_count": 3,
+      "total_bytes": 112395,
+      "errors": [],
+      "warnings": []
+    },
+    {
+      "episode_id": "episode_20260730T164859222Z_bot_s1004_04",
+      "mode": "bot",
+      "seed": 1004,
+      "course_hash": "40bd447f",
+      "end_reason": "goal",
+      "complete": true,
+      "trajectory_frames": 165,
+      "capture_frames": 0,
+      "capture_dropped": 0,
+      "missing_capture_frames": 0,
+      "file_count": 3,
+      "total_bytes": 112406,
+      "errors": [],
+      "warnings": []
+    },
+    {
+      "episode_id": "episode_20260730T164906257Z_bot_s1005_05",
+      "mode": "bot",
+      "seed": 1005,
+      "course_hash": "272660de",
+      "end_reason": "goal",
+      "complete": true,
+      "trajectory_frames": 165,
+      "capture_frames": 0,
+      "capture_dropped": 0,
+      "missing_capture_frames": 0,
+      "file_count": 3,
+      "total_bytes": 112373,
+      "errors": [],
+      "warnings": []
+    },
+    {
+      "episode_id": "episode_20260730T164913385Z_bot_s1006_06",
+      "mode": "bot",
+      "seed": 1006,
+      "course_hash": "94738101",
+      "end_reason": "goal",
+      "complete": true,
+      "trajectory_frames": 165,
+      "capture_frames": 0,
+      "capture_dropped": 0,
+      "missing_capture_frames": 0,
+      "file_count": 3,
+      "total_bytes": 112288,
+      "errors": [],
+      "warnings": []
+    },
+    {
+      "episode_id": "episode_20260730T164920481Z_bot_s1007_07",
+      "mode": "bot",
+      "seed": 1007,
+      "course_hash": "ac1b1c8d",
+      "end_reason": "goal",
+      "complete": true,
+      "trajectory_frames": 165,
+      "capture_frames": 0,
+      "capture_dropped": 0,
+      "missing_capture_frames": 0,
+      "file_count": 3,
+      "total_bytes": 112268,
+      "errors": [],
+      "warnings": []
+    },
+    {
+      "episode_id": "episode_20260730T164927729Z_bot_s1008_08",
+      "mode": "bot",
+      "seed": 1008,
+      "course_hash": "614a3567",
+      "end_reason": "goal",
+      "complete": true,
+      "trajectory_frames": 165,
+      "capture_frames": 0,
+      "capture_dropped": 0,
+      "missing_capture_frames": 0,
+      "file_count": 3,
+      "total_bytes": 112276,
+      "errors": [],
+      "warnings": []
+    },
+    {
+      "episode_id": "episode_20260730T164935297Z_bot_s1009_09",
+      "mode": "bot",
+      "seed": 1009,
+      "course_hash": "6c4be4e7",
+      "end_reason": "goal",
+      "complete": true,
+      "trajectory_frames": 165,
+      "capture_frames": 0,
+      "capture_dropped": 0,
+      "missing_capture_frames": 0,
+      "file_count": 3,
+      "total_bytes": 112241,
+      "errors": [],
+      "warnings": []
+    },
+    {
+      "episode_id": "episode_20260730T165021898Z_input-replay_s1000_00",
+      "mode": "input-replay",
+      "seed": 1000,
+      "course_hash": "2960b24b",
+      "end_reason": "replay_source_end",
+      "complete": true,
+      "trajectory_frames": 165,
+      "capture_frames": 0,
+      "capture_dropped": 0,
+      "missing_capture_frames": 0,
+      "file_count": 3,
+      "total_bytes": 112293,
+      "errors": [],
+      "warnings": []
+    },
+    {
+      "episode_id": "episode_20260730T165047652Z_input-replay_s1001_00",
+      "mode": "input-replay",
+      "seed": 1001,
+      "course_hash": "774d4473",
+      "end_reason": "replay_source_end",
+      "complete": true,
+      "trajectory_frames": 165,
+      "capture_frames": 0,
+      "capture_dropped": 0,
+      "missing_capture_frames": 0,
+      "file_count": 3,
+      "total_bytes": 112401,
+      "errors": [],
+      "warnings": []
+    },
+    {
+      "episode_id": "episode_20260730T165115218Z_input-replay_s1002_00",
+      "mode": "input-replay",
+      "seed": 1002,
+      "course_hash": "a4d77c48",
+      "end_reason": "replay_source_end",
+      "complete": true,
+      "trajectory_frames": 165,
+      "capture_frames": 0,
+      "capture_dropped": 0,
+      "missing_capture_frames": 0,
+      "file_count": 3,
+      "total_bytes": 112439,
+      "errors": [],
+      "warnings": []
+    }
+  ]
+}
