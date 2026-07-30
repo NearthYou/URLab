@@ -3,6 +3,8 @@
 #include "Dom/JsonObject.h"
 #include "Engine/Engine.h"
 #include "HAL/FileManager.h"
+#include "HAL/PlatformMisc.h"
+#include "HAL/PlatformProcess.h"
 #include "Misc/EngineVersion.h"
 #include "Misc/FileHelper.h"
 #include "Misc/Paths.h"
@@ -30,6 +32,38 @@ namespace
 			MakeShared<FJsonValueNumber>(Rotator.Yaw),
 			MakeShared<FJsonValueNumber>(Rotator.Roll)
 		};
+	}
+
+	FString ResolveGitRevision()
+	{
+		FString Revision = FPlatformMisc::GetEnvironmentVariable(TEXT("SIMTRACE_GIT_REVISION"));
+		Revision.TrimStartAndEndInline();
+		if (!Revision.IsEmpty())
+		{
+			return Revision;
+		}
+
+		int32 ReturnCode = INDEX_NONE;
+		FString StandardOutput;
+		FString StandardError;
+		const FString WorkingDirectory = FPaths::ConvertRelativePathToFull(FPaths::ProjectDir());
+		if (FPlatformProcess::ExecProcess(
+				TEXT("git.exe"),
+				TEXT("rev-parse --short=12 HEAD"),
+				&ReturnCode,
+				&StandardOutput,
+				&StandardError,
+				*WorkingDirectory) &&
+			ReturnCode == 0)
+		{
+			StandardOutput.TrimStartAndEndInline();
+			if (!StandardOutput.IsEmpty())
+			{
+				return StandardOutput;
+			}
+		}
+
+		return TEXT("unavailable");
 	}
 }
 
@@ -60,7 +94,10 @@ bool UEpisodeRecorderComponent::BeginEpisode(
 	CapturesDropped = 0;
 	LastEndReason = ESimTraceEndReason::None;
 
-	const FString UtcId = StartedUtc.ToString(TEXT("%Y%m%dT%H%M%S%fZ"));
+	const FString UtcId = FString::Printf(
+		TEXT("%s%03dZ"),
+		*StartedUtc.ToString(TEXT("%Y%m%dT%H%M%S")),
+		StartedUtc.GetMillisecond());
 	EpisodeId = FString::Printf(
 		TEXT("episode_%s_%s_s%d_%02d"),
 		*UtcId,
@@ -195,19 +232,19 @@ bool UEpisodeRecorderComponent::WriteManifest(
 	Manifest->SetArrayField(TEXT("goal_position_cm"), VectorToJson(Layout.GoalTransform.GetLocation()));
 	Manifest->SetStringField(TEXT("engine_version"), FEngineVersion::Current().ToString());
 
-	FString GitRevision = FPlatformMisc::GetEnvironmentVariable(TEXT("SIMTRACE_GIT_REVISION"));
-	if (GitRevision.IsEmpty())
-	{
-		GitRevision = TEXT("unavailable");
-	}
-	Manifest->SetStringField(TEXT("git_revision"), GitRevision);
+	Manifest->SetStringField(TEXT("git_revision"), ResolveGitRevision());
 	Manifest->SetNumberField(TEXT("simulation_hz"), 30);
 	Manifest->SetNumberField(TEXT("capture_hz"), RuntimeConfig.bCapture ? 10 : 0);
+	Manifest->SetNumberField(TEXT("capture_interval_sim_frames"), 3);
+	Manifest->SetNumberField(TEXT("capture_queue_capacity"), 8);
 	Manifest->SetNumberField(TEXT("image_width"), 320);
 	Manifest->SetNumberField(TEXT("image_height"), 180);
 	Manifest->SetStringField(TEXT("sensor_type"), TEXT("scene_depth"));
 	Manifest->SetStringField(TEXT("depth_encoding"), TEXT("uint16_linear_cm"));
 	Manifest->SetNumberField(TEXT("depth_max_cm"), 2000);
+	Manifest->SetStringField(
+		TEXT("depth_decode_cm"),
+		TEXT("value == 0 ? invalid : min(value / 65535.0 * 2000.0, 2000.0)"));
 	Manifest->SetNumberField(TEXT("trajectory_frames"), SamplesWritten);
 	Manifest->SetNumberField(TEXT("capture_frames"), CapturesWritten);
 	Manifest->SetNumberField(TEXT("capture_dropped"), CapturesDropped);
