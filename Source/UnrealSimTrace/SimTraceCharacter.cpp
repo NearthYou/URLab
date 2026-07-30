@@ -63,6 +63,11 @@ ASimTraceCharacter::ASimTraceCharacter()
 	BackwardSwizzle->Order = EInputAxisSwizzle::YXZ;
 	UInputModifierNegate* LeftNegate =
 		CreateDefaultSubobject<UInputModifierNegate>(TEXT("LeftNegate"));
+	UInputModifierNegate* MouseYNegate =
+		CreateDefaultSubobject<UInputModifierNegate>(TEXT("MouseYNegate"));
+	MouseYNegate->bX = false;
+	MouseYNegate->bY = true;
+	MouseYNegate->bZ = false;
 
 	FEnhancedActionKeyMapping& Forward = MappingContext->MapKey(MoveAction, EKeys::W);
 	Forward.Modifiers.Add(ForwardSwizzle);
@@ -72,7 +77,8 @@ ASimTraceCharacter::ASimTraceCharacter()
 	FEnhancedActionKeyMapping& Left = MappingContext->MapKey(MoveAction, EKeys::A);
 	Left.Modifiers.Add(LeftNegate);
 	MappingContext->MapKey(MoveAction, EKeys::D);
-	MappingContext->MapKey(LookAction, EKeys::Mouse2D);
+	FEnhancedActionKeyMapping& Look = MappingContext->MapKey(LookAction, EKeys::Mouse2D);
+	Look.Modifiers.Add(MouseYNegate);
 	MappingContext->MapKey(JumpAction, EKeys::SpaceBar);
 	MappingContext->MapKey(ResetAction, EKeys::R);
 	MappingContext->MapKey(ExitAction, EKeys::Escape);

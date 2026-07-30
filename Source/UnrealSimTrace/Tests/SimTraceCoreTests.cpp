@@ -1,7 +1,12 @@
 #if WITH_DEV_AUTOMATION_TESTS
 
+#include "EnhancedActionKeyMapping.h"
+#include "InputCoreTypes.h"
+#include "InputMappingContext.h"
+#include "InputModifiers.h"
 #include "Misc/AutomationTest.h"
 #include "SimTraceCaptureComponent.h"
+#include "SimTraceCharacter.h"
 #include "SimTraceCourseLayout.h"
 #include "SimTraceRuntimeConfig.h"
 #include "SimTraceTypes.h"
@@ -91,6 +96,47 @@ bool FSimTraceDepthEncodingTest::RunTest(const FString& Parameters)
 	TestEqual(TEXT("Half range maps to midpoint"), FSimTraceDepthEncoding::EncodeCentimeters(1000.0f), uint16(32768));
 	TestEqual(TEXT("Maximum depth saturates"), FSimTraceDepthEncoding::EncodeCentimeters(2000.0f), uint16(65535));
 	TestEqual(TEXT("Beyond maximum saturates"), FSimTraceDepthEncoding::EncodeCentimeters(5000.0f), uint16(65535));
+	return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+	FSimTraceHumanLookMappingTest,
+	"SimTrace.Core.HumanLookMapping",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FSimTraceHumanLookMappingTest::RunTest(const FString& Parameters)
+{
+	ASimTraceCharacter* Character = GetMutableDefault<ASimTraceCharacter>();
+	UInputMappingContext* MappingContext =
+		Cast<UInputMappingContext>(Character->GetDefaultSubobjectByName(TEXT("IMC_SimTrace")));
+	if (!TestNotNull(TEXT("Runtime mapping context exists"), MappingContext))
+	{
+		return false;
+	}
+
+	const FEnhancedActionKeyMapping* LookMapping =
+		MappingContext->GetMappings().FindByPredicate(
+			[Character](const FEnhancedActionKeyMapping& Mapping)
+			{
+				return Mapping.Action == Character->GetLookAction() && Mapping.Key == EKeys::Mouse2D;
+			});
+	if (!TestNotNull(TEXT("Mouse2D is mapped to the look action"), LookMapping))
+	{
+		return false;
+	}
+
+	const UInputModifierNegate* VerticalNegate = nullptr;
+	for (const TObjectPtr<UInputModifier>& Modifier : LookMapping->Modifiers)
+	{
+		if (const UInputModifierNegate* Negate = Cast<UInputModifierNegate>(Modifier.Get());
+			Negate && !Negate->bX && Negate->bY && !Negate->bZ)
+		{
+			VerticalNegate = Negate;
+			break;
+		}
+	}
+
+	TestNotNull(TEXT("Mouse look negates only the vertical axis"), VerticalNegate);
 	return true;
 }
 
