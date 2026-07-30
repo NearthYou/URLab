@@ -5,6 +5,7 @@
 #include "Engine/World.h"
 #include "GameFramework/CharacterMovementComponent.h"
 #include "HAL/PlatformMisc.h"
+#include "HAL/PlatformTime.h"
 #include "Misc/FileHelper.h"
 #include "Misc/Paths.h"
 #include "Serialization/JsonReader.h"
@@ -62,6 +63,11 @@ void ASimTraceGameMode::Tick(const float DeltaSeconds)
 	}
 
 	const FSimTraceRuntimeConfig& Config = GameInstance->GetRuntimeConfig();
+	const double CurrentRealTickSeconds = FPlatformTime::Seconds();
+	const double RealFrameTimeMilliseconds = LastRealTickSeconds > 0.0
+		? (CurrentRealTickSeconds - LastRealTickSeconds) * 1000.0
+		: 0.0;
+	LastRealTickSeconds = CurrentRealTickSeconds;
 	ESimTraceEndReason EndReason = ESimTraceEndReason::None;
 	if (bManualAbortRequested)
 	{
@@ -114,7 +120,7 @@ void ASimTraceGameMode::Tick(const float DeltaSeconds)
 	if (!Recorder->RecordFrame(
 			bDone,
 			EndReason,
-			DeltaSeconds * 1000.0,
+			RealFrameTimeMilliseconds,
 			CaptureResult.bCaptured,
 			CaptureResult.bDropped,
 			CaptureResult.RgbRelativePath,
@@ -224,6 +230,7 @@ void ASimTraceGameMode::StartEpisode()
 	}
 
 	GameInstance->StartEpisodeReplay(Recorder->GetReplayName());
+	LastRealTickSeconds = FPlatformTime::Seconds();
 	bEpisodeActive = true;
 	if (GEngine)
 	{

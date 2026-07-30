@@ -40,6 +40,7 @@ private:
 	bool bEpisodeActive = false;
 	bool bManualAbortRequested = false;
 	bool bCaptureReady = false;
+	double LastRealTickSeconds = 0.0;
 	FTimerHandle EpisodeTimer;
 
 	void StartEpisode();
