@@ -51,6 +51,10 @@ flowchart LR
     I --> J
 ```
 
+episode를 reset한 뒤에는 사람 입력을 잠근 상태로 PostPhysics 한 프레임을
+warm-up하고, 그 다음 프레임부터 recorder와 native Replay를 함께 시작한다.
+이 순서로 CharacterMovement의 바닥 정착이 끝난 상태를 `sim_frame = 0`으로 기록한다.
+
 핵심 책임은 다음 파일에 나뉜다.
 
 | 책임 | 파일 |

@@ -38,6 +38,8 @@ private:
 	int32 ReplaySeed = 0;
 	int32 EpisodeIndex = 0;
 	mutable int32 BotWaypointIndex = 0;
+	int32 WarmupFramesRemaining = 0;
+	bool bEpisodePreparing = false;
 	bool bEpisodeActive = false;
 	bool bManualAbortRequested = false;
 	bool bCaptureReady = false;
@@ -45,6 +47,7 @@ private:
 	FTimerHandle EpisodeTimer;
 
 	void StartEpisode();
+	void ActivateEpisode();
 	void FinishEpisode(ESimTraceEndReason EndReason);
 	void ArchiveAndContinue(FString EpisodeDirectory, FString ReplayName);
 	bool LoadReplayInput(int32& OutSeed);

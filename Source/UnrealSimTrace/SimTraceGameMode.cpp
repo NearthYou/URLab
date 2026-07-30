@@ -18,6 +18,11 @@
 #include "TimerManager.h"
 #include "UnrealSimTrace.h"
 
+namespace
+{
+	constexpr int32 EpisodeWarmupFrames = 1;
+}
+
 ASimTraceGameMode::ASimTraceGameMode()
 {
 	PrimaryActorTick.bCanEverTick = true;
@@ -50,6 +55,18 @@ void ASimTraceGameMode::BeginPlay()
 void ASimTraceGameMode::Tick(const float DeltaSeconds)
 {
 	Super::Tick(DeltaSeconds);
+	if (bEpisodePreparing)
+	{
+		if (WarmupFramesRemaining > 0)
+		{
+			--WarmupFramesRemaining;
+			return;
+		}
+
+		ActivateEpisode();
+		return;
+	}
+
 	if (!bEpisodeActive || !Recorder || !SimTraceCharacter || !Course)
 	{
 		return;
@@ -171,7 +188,7 @@ void ASimTraceGameMode::RequestManualAbort()
 void ASimTraceGameMode::StartEpisode()
 {
 	USimTraceGameInstance* GameInstance = GetGameInstance<USimTraceGameInstance>();
-	if (!GameInstance || !Course)
+	if (!GameInstance || !Course || bEpisodePreparing || bEpisodeActive)
 	{
 		FPlatformMisc::RequestExitWithStatus(false, 1);
 		return;
@@ -215,11 +232,33 @@ void ASimTraceGameMode::StartEpisode()
 		return;
 	}
 
+	if (PlayerController)
+	{
+		PlayerController->SetIgnoreMoveInput(true);
+		PlayerController->SetIgnoreLookInput(true);
+	}
 	SimTraceCharacter->ResetForEpisode(Course->GetLayout().StartTransform);
 	bCaptureReady = !Config.bCapture ||
 		SimTraceCharacter->GetCaptureComponent()->InitializeCapture();
 	BotWaypointIndex = 0;
 	bManualAbortRequested = false;
+	// Let CharacterMovement resolve the teleported capsule against the floor
+	// before frame zero and the native replay begin.
+	WarmupFramesRemaining = EpisodeWarmupFrames;
+	bEpisodePreparing = true;
+}
+
+void ASimTraceGameMode::ActivateEpisode()
+{
+	USimTraceGameInstance* GameInstance = GetGameInstance<USimTraceGameInstance>();
+	if (!GameInstance || !Course || !SimTraceCharacter || !Recorder)
+	{
+		bEpisodePreparing = false;
+		FPlatformMisc::RequestExitWithStatus(false, 1);
+		return;
+	}
+
+	const FSimTraceRuntimeConfig& Config = GameInstance->GetRuntimeConfig();
 	if (!Recorder->BeginEpisode(
 			SimTraceCharacter,
 			Course,
@@ -228,12 +267,20 @@ void ASimTraceGameMode::StartEpisode()
 			ParentEpisodeId))
 	{
 		UE_LOG(LogSimTrace, Error, TEXT("Unable to start episode recorder"));
+		bEpisodePreparing = false;
 		FPlatformMisc::RequestExitWithStatus(false, 1);
 		return;
 	}
 
 	GameInstance->StartEpisodeReplay(Recorder->GetReplayName());
+	if (APlayerController* PlayerController = GetWorld()->GetFirstPlayerController())
+	{
+		PlayerController->SetIgnoreMoveInput(false);
+		PlayerController->SetIgnoreLookInput(false);
+	}
+	SimTraceCharacter->BeginInputFrame();
 	LastRealTickSeconds = FPlatformTime::Seconds();
+	bEpisodePreparing = false;
 	bEpisodeActive = true;
 	if (GEngine)
 	{
@@ -244,7 +291,7 @@ void ASimTraceGameMode::StartEpisode()
 			FString::Printf(
 				TEXT("SimTrace %s | seed %d | episode %d/%d"),
 				*LexToString(Config.Mode),
-				EpisodeSeed,
+				Course->GetLayout().Seed,
 				EpisodeIndex + 1,
 				Config.BatchCount));
 	}
