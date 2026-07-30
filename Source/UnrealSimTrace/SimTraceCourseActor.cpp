@@ -1,0 +1,191 @@
+#include "SimTraceCourseActor.h"
+
+#include "Components/BoxComponent.h"
+#include "Components/DirectionalLightComponent.h"
+#include "Components/PointLightComponent.h"
+#include "Components/SkyAtmosphereComponent.h"
+#include "Components/StaticMeshComponent.h"
+#include "Engine/StaticMesh.h"
+#include "GameFramework/Character.h"
+#include "Net/UnrealNetwork.h"
+#include "UObject/ConstructorHelpers.h"
+
+ASimTraceCourseActor::ASimTraceCourseActor()
+{
+	bReplicates = true;
+	bAlwaysRelevant = true;
+	SetReplicateMovement(false);
+
+	SceneRoot = CreateDefaultSubobject<USceneComponent>(TEXT("SceneRoot"));
+	SetRootComponent(SceneRoot);
+
+	GoalTrigger = CreateDefaultSubobject<UBoxComponent>(TEXT("GoalTrigger"));
+	GoalTrigger->SetupAttachment(SceneRoot);
+	GoalTrigger->SetBoxExtent(FVector(100.0, 300.0, 125.0));
+	GoalTrigger->SetCollisionEnabled(ECollisionEnabled::QueryOnly);
+	GoalTrigger->SetCollisionResponseToAllChannels(ECR_Ignore);
+	GoalTrigger->SetCollisionResponseToChannel(ECC_Pawn, ECR_Overlap);
+	GoalTrigger->OnComponentBeginOverlap.AddDynamic(this, &ASimTraceCourseActor::OnGoalBeginOverlap);
+
+	SkyAtmosphere = CreateDefaultSubobject<USkyAtmosphereComponent>(TEXT("SkyAtmosphere"));
+	SkyAtmosphere->SetupAttachment(SceneRoot);
+
+	SunLight = CreateDefaultSubobject<UDirectionalLightComponent>(TEXT("SunLight"));
+	SunLight->SetupAttachment(SceneRoot);
+	SunLight->SetRelativeRotation(FRotator(-45.0, -35.0, 0.0));
+	SunLight->SetIntensity(8.0f);
+	SunLight->SetAtmosphereSunLight(true);
+
+	FillLightNear = CreateDefaultSubobject<UPointLightComponent>(TEXT("FillLightNear"));
+	FillLightNear->SetupAttachment(SceneRoot);
+	FillLightNear->SetRelativeLocation(FVector(600.0, 0.0, 650.0));
+	FillLightNear->SetIntensity(20000.0f);
+	FillLightNear->SetAttenuationRadius(1800.0f);
+
+	FillLightMiddle = CreateDefaultSubobject<UPointLightComponent>(TEXT("FillLightMiddle"));
+	FillLightMiddle->SetupAttachment(SceneRoot);
+	FillLightMiddle->SetRelativeLocation(FVector(1600.0, 0.0, 650.0));
+	FillLightMiddle->SetIntensity(20000.0f);
+	FillLightMiddle->SetAttenuationRadius(1800.0f);
+
+	FillLightFar = CreateDefaultSubobject<UPointLightComponent>(TEXT("FillLightFar"));
+	FillLightFar->SetupAttachment(SceneRoot);
+	FillLightFar->SetRelativeLocation(FVector(2700.0, 0.0, 650.0));
+	FillLightFar->SetIntensity(20000.0f);
+	FillLightFar->SetAttenuationRadius(1800.0f);
+
+	static ConstructorHelpers::FObjectFinder<UStaticMesh> CubeFinder(TEXT("/Engine/BasicShapes/Cube.Cube"));
+	CubeMesh = CubeFinder.Object;
+}
+
+void ASimTraceCourseActor::SetCourseSeed(const int32 InSeed)
+{
+	CourseSeed = InSeed;
+	BuildCourse();
+}
+
+void ASimTraceCourseActor::BeginPlay()
+{
+	Super::BeginPlay();
+	BuildCourse();
+}
+
+void ASimTraceCourseActor::ResetGoal()
+{
+	bGoalReached = false;
+}
+
+void ASimTraceCourseActor::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const
+{
+	Super::GetLifetimeReplicatedProps(OutLifetimeProps);
+	DOREPLIFETIME(ASimTraceCourseActor, CourseSeed);
+}
+
+void ASimTraceCourseActor::OnRep_CourseSeed()
+{
+	BuildCourse();
+}
+
+void ASimTraceCourseActor::OnGoalBeginOverlap(
+	UPrimitiveComponent* OverlappedComponent,
+	AActor* OtherActor,
+	UPrimitiveComponent* OtherComponent,
+	int32 OtherBodyIndex,
+	bool bFromSweep,
+	const FHitResult& SweepResult)
+{
+	if (Cast<ACharacter>(OtherActor))
+	{
+		bGoalReached = true;
+	}
+}
+
+void ASimTraceCourseActor::BuildCourse()
+{
+	Layout = FSimTraceCourseLayout::Generate(CourseSeed);
+
+	for (const FSimTraceCourseElement& Element : Layout.Elements)
+	{
+		if (Element.Name == TEXT("gate"))
+		{
+			AddGate();
+			continue;
+		}
+
+		AddBox(Element.Name, Element.Transform, Element.Dimensions);
+	}
+
+	GoalTrigger->SetWorldLocation(Layout.GoalTransform.GetLocation());
+	AddGoalVisuals();
+	ResetGoal();
+}
+
+UStaticMeshComponent* ASimTraceCourseActor::AddBox(
+	const FName Name,
+	const FTransform& Transform,
+	const FVector& Dimensions,
+	const bool bCollisionEnabled)
+{
+	if (!CubeMesh)
+	{
+		return nullptr;
+	}
+
+	UStaticMeshComponent* Mesh = RuntimeMeshes.FindRef(Name);
+	if (!IsValid(Mesh))
+	{
+		Mesh = NewObject<UStaticMeshComponent>(this, Name);
+		Mesh->SetNetAddressable();
+		AddInstanceComponent(Mesh);
+		Mesh->SetupAttachment(SceneRoot);
+		Mesh->SetStaticMesh(CubeMesh);
+		Mesh->SetMobility(EComponentMobility::Movable);
+		Mesh->RegisterComponent();
+		RuntimeMeshes.Add(Name, Mesh);
+	}
+
+	Mesh->SetWorldTransform(Transform);
+	Mesh->SetWorldScale3D(Dimensions / 100.0);
+	Mesh->SetCollisionEnabled(bCollisionEnabled ? ECollisionEnabled::QueryAndPhysics : ECollisionEnabled::NoCollision);
+	Mesh->SetCollisionProfileName(bCollisionEnabled ? TEXT("BlockAll") : TEXT("NoCollision"));
+	return Mesh;
+}
+
+void ASimTraceCourseActor::AddGate()
+{
+	constexpr double CorridorMinY = -400.0;
+	constexpr double CorridorMaxY = 400.0;
+	constexpr double GapHalfWidth = 120.0;
+	const double LowerEnd = Layout.GateCenterY - GapHalfWidth;
+	const double UpperStart = Layout.GateCenterY + GapHalfWidth;
+
+	const double LowerWidth = LowerEnd - CorridorMinY;
+	const double UpperWidth = CorridorMaxY - UpperStart;
+	AddBox(
+		TEXT("gate_lower"),
+		FTransform(FRotator::ZeroRotator, FVector(2400.0, CorridorMinY + LowerWidth * 0.5, 100.0)),
+		FVector(80.0, LowerWidth, 200.0));
+	AddBox(
+		TEXT("gate_upper"),
+		FTransform(FRotator::ZeroRotator, FVector(2400.0, UpperStart + UpperWidth * 0.5, 100.0)),
+		FVector(80.0, UpperWidth, 200.0));
+}
+
+void ASimTraceCourseActor::AddGoalVisuals()
+{
+	AddBox(
+		TEXT("goal_left"),
+		FTransform(FRotator::ZeroRotator, FVector(3100.0, -300.0, 125.0)),
+		FVector(40.0, 40.0, 250.0),
+		false);
+	AddBox(
+		TEXT("goal_right"),
+		FTransform(FRotator::ZeroRotator, FVector(3100.0, 300.0, 125.0)),
+		FVector(40.0, 40.0, 250.0),
+		false);
+	AddBox(
+		TEXT("goal_top"),
+		FTransform(FRotator::ZeroRotator, FVector(3100.0, 0.0, 250.0)),
+		FVector(40.0, 640.0, 40.0),
+		false);
+}
