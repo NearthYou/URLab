@@ -2,6 +2,7 @@
 
 #include "Misc/AutomationTest.h"
 #include "SimTraceCourseLayout.h"
+#include "SimTraceRuntimeConfig.h"
 #include "SimTraceTypes.h"
 #include "Serialization/JsonReader.h"
 #include "Serialization/JsonSerializer.h"
@@ -51,6 +52,30 @@ bool FSimTraceTrajectorySerializationTest::RunTest(const FString& Parameters)
 		Parsed.IsValid() && FMath::IsNearlyEqual(Parsed->GetNumberField(TEXT("timestamp_s")), 1.4, 0.000001));
 	TestTrue(TEXT("Done state is serialized"), JsonLine.Contains(TEXT("\"done\":true")));
 	TestTrue(TEXT("End reason is serialized"), JsonLine.Contains(TEXT("\"end_reason\":\"goal\"")));
+	return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+	FSimTraceRuntimeConfigTest,
+	"SimTrace.Core.RuntimeConfig",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FSimTraceRuntimeConfigTest::RunTest(const FString& Parameters)
+{
+	const FSimTraceRuntimeConfig Config = FSimTraceRuntimeConfig::Parse(
+		TEXT("-SimTraceMode=bot -SimTraceSeed=1000 -SimTraceBatchCount=10 ")
+		TEXT("-SimTraceCapture=0 -SimTraceMaxSeconds=45"));
+
+	TestEqual(TEXT("Mode parses"), Config.Mode, ESimTraceMode::Bot);
+	TestEqual(TEXT("Seed parses"), Config.Seed, 1000);
+	TestEqual(TEXT("Batch count parses"), Config.BatchCount, 10);
+	TestFalse(TEXT("Capture toggle parses"), Config.bCapture);
+	TestEqual(TEXT("Timeout parses"), Config.MaxSeconds, 45.0);
+
+	const FSimTraceRuntimeConfig SafeDefaults = FSimTraceRuntimeConfig::Parse(
+		TEXT("-SimTraceBatchCount=0 -SimTraceMaxSeconds=-1"));
+	TestEqual(TEXT("Batch count is clamped"), SafeDefaults.BatchCount, 1);
+	TestEqual(TEXT("Timeout is clamped"), SafeDefaults.MaxSeconds, 1.0);
 	return true;
 }
 

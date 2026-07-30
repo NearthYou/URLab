@@ -1,0 +1,72 @@
+#pragma once
+
+#include "CoreMinimal.h"
+#include "GameFramework/Actor.h"
+#include "SimTraceCourseLayout.h"
+#include "SimTraceCourseActor.generated.h"
+
+class UBoxComponent;
+class UStaticMesh;
+class UStaticMeshComponent;
+class UPrimitiveComponent;
+
+UCLASS()
+class UNREALSIMTRACE_API ASimTraceCourseActor : public AActor
+{
+	GENERATED_BODY()
+
+public:
+	ASimTraceCourseActor();
+
+	void SetCourseSeed(int32 InSeed);
+	void ResetGoal();
+
+	const FSimTraceCourseLayout& GetLayout() const { return Layout; }
+	FVector GetGoalLocation() const { return Layout.GoalTransform.GetLocation(); }
+	bool WasGoalReached() const { return bGoalReached; }
+
+protected:
+	virtual void GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const override;
+
+private:
+	UPROPERTY(ReplicatedUsing=OnRep_CourseSeed)
+	int32 CourseSeed = 1000;
+
+	UPROPERTY()
+	TObjectPtr<USceneComponent> SceneRoot;
+
+	UPROPERTY()
+	TObjectPtr<UBoxComponent> GoalTrigger;
+
+	UPROPERTY()
+	TObjectPtr<UStaticMesh> CubeMesh;
+
+	UPROPERTY()
+	TArray<TObjectPtr<UStaticMeshComponent>> RuntimeMeshes;
+
+	FSimTraceCourseLayout Layout;
+	bool bGoalReached = false;
+
+	UFUNCTION()
+	void OnRep_CourseSeed();
+
+	UFUNCTION()
+	void OnGoalBeginOverlap(
+		UPrimitiveComponent* OverlappedComponent,
+		AActor* OtherActor,
+		UPrimitiveComponent* OtherComponent,
+		int32 OtherBodyIndex,
+		bool bFromSweep,
+		const FHitResult& SweepResult);
+
+	void BuildCourse();
+	void ClearCourse();
+	UStaticMeshComponent* AddBox(
+		FName Name,
+		const FTransform& Transform,
+		const FVector& Dimensions,
+		bool bCollisionEnabled = true);
+	void AddGate();
+	void AddGoalVisuals();
+};
+
