@@ -34,7 +34,6 @@ public:
 	bool InitializeCapture();
 	FSimTraceCaptureResult CaptureFrame(int32 SimFrame, const FString& EpisodeDirectory);
 	bool FlushPendingWrites();
-	bool HasWriteError() const { return bWriteError; }
 
 protected:
 	virtual void EndPlay(const EEndPlayReason::Type EndPlayReason) override;
@@ -67,4 +66,3 @@ private:
 		const FString& RgbPath,
 		const FString& DepthPath);
 };
-

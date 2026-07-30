@@ -33,10 +33,34 @@ void USimTraceGameInstance::Shutdown()
 void USimTraceGameInstance::OnStart()
 {
 	Super::OnStart();
-	if (RuntimeConfig.Mode == ESimTraceMode::NativeReplay && !RuntimeConfig.ReplayName.IsEmpty())
+	if (RuntimeConfig.Mode != ESimTraceMode::NativeReplay)
 	{
-		RestoreReplayArchive(RuntimeConfig.ReplayName);
-		PlayReplay(RuntimeConfig.ReplayName);
+		return;
+	}
+	if (RuntimeConfig.ReplayName.IsEmpty())
+	{
+		UE_LOG(LogSimTrace, Error, TEXT("Native replay mode requires -SimTraceReplay"));
+		FPlatformMisc::RequestExitWithStatus(false, 1);
+		return;
+	}
+	if (!RestoreReplayArchive(RuntimeConfig.ReplayName))
+	{
+		UE_LOG(
+			LogSimTrace,
+			Error,
+			TEXT("Unable to restore native replay archive: %s"),
+			*RuntimeConfig.ReplayName);
+		FPlatformMisc::RequestExitWithStatus(false, 1);
+		return;
+	}
+	if (!PlayReplay(RuntimeConfig.ReplayName))
+	{
+		UE_LOG(
+			LogSimTrace,
+			Error,
+			TEXT("Unable to start native replay: %s"),
+			*RuntimeConfig.ReplayName);
+		FPlatformMisc::RequestExitWithStatus(false, 1);
 	}
 }
 
@@ -95,7 +119,7 @@ bool USimTraceGameInstance::RestoreReplayArchive(const FString& ReplayName) cons
 	return IFileManager::Get().Copy(*DemoPath, *Matches[0], true, true) == COPY_OK;
 }
 
-void USimTraceGameInstance::HandleReplayPlaybackComplete(UWorld* ReplayWorld)
+void USimTraceGameInstance::HandleReplayPlaybackComplete(UWorld*)
 {
 	if (RuntimeConfig.Mode == ESimTraceMode::NativeReplay)
 	{

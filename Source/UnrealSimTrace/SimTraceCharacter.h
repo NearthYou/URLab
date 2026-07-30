@@ -62,6 +62,9 @@ private:
 	TObjectPtr<UInputAction> ResetAction;
 
 	UPROPERTY()
+	TObjectPtr<UInputAction> ExitAction;
+
+	UPROPERTY()
 	TObjectPtr<UInputMappingContext> MappingContext;
 
 	FSimTraceActionState CurrentAction;
@@ -72,4 +75,5 @@ private:
 	void JumpInput(const FInputActionValue& Value);
 	void JumpCompleted(const FInputActionValue& Value);
 	void ManualAbortInput(const FInputActionValue& Value);
+	void ExitInput(const FInputActionValue& Value);
 };

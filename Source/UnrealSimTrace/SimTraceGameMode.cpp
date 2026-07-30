@@ -3,7 +3,6 @@
 #include "Dom/JsonObject.h"
 #include "Engine/Engine.h"
 #include "Engine/World.h"
-#include "GameFramework/CharacterMovementComponent.h"
 #include "HAL/PlatformMisc.h"
 #include "HAL/PlatformTime.h"
 #include "Misc/FileHelper.h"
@@ -267,7 +266,12 @@ void ASimTraceGameMode::FinishEpisode(const ESimTraceEndReason EndReason)
 
 	const FString EpisodeDirectory = Recorder->GetEpisodeDirectory();
 	const FString ReplayName = Recorder->GetReplayName();
-	Recorder->FinishEpisode(EndReason);
+	if (!Recorder->FinishEpisode(EndReason))
+	{
+		UE_LOG(LogSimTrace, Error, TEXT("Unable to finalize episode manifest"));
+		FPlatformMisc::RequestExitWithStatus(false, 1);
+		return;
+	}
 
 	if (GEngine)
 	{
@@ -292,13 +296,19 @@ void ASimTraceGameMode::ArchiveAndContinue(
 	FString ReplayName)
 {
 	USimTraceGameInstance* GameInstance = GetGameInstance<USimTraceGameInstance>();
-	if (GameInstance)
+	const bool bReplayArchived =
+		GameInstance && GameInstance->ArchiveReplay(ReplayName, EpisodeDirectory);
+	const bool bManifestRefreshed =
+		Recorder && Recorder->RefreshCompletedManifest();
+	if (!bReplayArchived || !bManifestRefreshed)
 	{
-		GameInstance->ArchiveReplay(ReplayName, EpisodeDirectory);
-	}
-	if (Recorder)
-	{
-		Recorder->RefreshCompletedManifest();
+		UE_LOG(
+			LogSimTrace,
+			Error,
+			TEXT("Unable to archive replay or refresh manifest for %s"),
+			*EpisodeDirectory);
+		FPlatformMisc::RequestExitWithStatus(false, 1);
+		return;
 	}
 
 	++EpisodeIndex;

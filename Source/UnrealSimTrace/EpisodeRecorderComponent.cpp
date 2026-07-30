@@ -1,7 +1,6 @@
 #include "EpisodeRecorderComponent.h"
 
 #include "Dom/JsonObject.h"
-#include "Engine/Engine.h"
 #include "HAL/FileManager.h"
 #include "HAL/PlatformMisc.h"
 #include "HAL/PlatformProcess.h"
@@ -12,7 +11,6 @@
 #include "Serialization/JsonWriter.h"
 #include "SimTraceCharacter.h"
 #include "SimTraceCourseActor.h"
-#include "UnrealSimTrace.h"
 
 namespace
 {
@@ -36,34 +34,39 @@ namespace
 
 	FString ResolveGitRevision()
 	{
-		FString Revision = FPlatformMisc::GetEnvironmentVariable(TEXT("SIMTRACE_GIT_REVISION"));
-		Revision.TrimStartAndEndInline();
-		if (!Revision.IsEmpty())
+		static const FString Revision = []
 		{
-			return Revision;
-		}
-
-		int32 ReturnCode = INDEX_NONE;
-		FString StandardOutput;
-		FString StandardError;
-		const FString WorkingDirectory = FPaths::ConvertRelativePathToFull(FPaths::ProjectDir());
-		if (FPlatformProcess::ExecProcess(
-				TEXT("git.exe"),
-				TEXT("rev-parse --short=12 HEAD"),
-				&ReturnCode,
-				&StandardOutput,
-				&StandardError,
-				*WorkingDirectory) &&
-			ReturnCode == 0)
-		{
-			StandardOutput.TrimStartAndEndInline();
-			if (!StandardOutput.IsEmpty())
+			FString Value = FPlatformMisc::GetEnvironmentVariable(TEXT("SIMTRACE_GIT_REVISION"));
+			Value.TrimStartAndEndInline();
+			if (!Value.IsEmpty())
 			{
-				return StandardOutput;
+				return Value;
 			}
-		}
 
-		return TEXT("unavailable");
+			int32 ReturnCode = INDEX_NONE;
+			FString StandardOutput;
+			FString StandardError;
+			const FString WorkingDirectory =
+				FPaths::ConvertRelativePathToFull(FPaths::ProjectDir());
+			if (FPlatformProcess::ExecProcess(
+					TEXT("git.exe"),
+					TEXT("rev-parse --short=12 HEAD"),
+					&ReturnCode,
+					&StandardOutput,
+					&StandardError,
+					*WorkingDirectory) &&
+				ReturnCode == 0)
+			{
+				StandardOutput.TrimStartAndEndInline();
+				if (!StandardOutput.IsEmpty())
+				{
+					return StandardOutput;
+				}
+			}
+
+			return FString(TEXT("unavailable"));
+		}();
+		return Revision;
 	}
 }
 

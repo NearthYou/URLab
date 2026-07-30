@@ -12,6 +12,7 @@
 #include "InputCoreTypes.h"
 #include "InputMappingContext.h"
 #include "InputModifiers.h"
+#include "HAL/PlatformMisc.h"
 #include "SimTraceGameInstance.h"
 #include "SimTraceGameMode.h"
 #include "SimTraceCaptureComponent.h"
@@ -48,6 +49,8 @@ ASimTraceCharacter::ASimTraceCharacter()
 	JumpAction->ValueType = EInputActionValueType::Boolean;
 	ResetAction = CreateDefaultSubobject<UInputAction>(TEXT("IA_Reset"));
 	ResetAction->ValueType = EInputActionValueType::Boolean;
+	ExitAction = CreateDefaultSubobject<UInputAction>(TEXT("IA_Exit"));
+	ExitAction->ValueType = EInputActionValueType::Boolean;
 	MappingContext = CreateDefaultSubobject<UInputMappingContext>(TEXT("IMC_SimTrace"));
 
 	UInputModifierSwizzleAxis* ForwardSwizzle =
@@ -72,6 +75,7 @@ ASimTraceCharacter::ASimTraceCharacter()
 	MappingContext->MapKey(LookAction, EKeys::Mouse2D);
 	MappingContext->MapKey(JumpAction, EKeys::SpaceBar);
 	MappingContext->MapKey(ResetAction, EKeys::R);
+	MappingContext->MapKey(ExitAction, EKeys::Escape);
 }
 
 void ASimTraceCharacter::SetupPlayerInputComponent(UInputComponent* PlayerInputComponent)
@@ -89,6 +93,7 @@ void ASimTraceCharacter::SetupPlayerInputComponent(UInputComponent* PlayerInputC
 	EnhancedInput->BindAction(JumpAction, ETriggerEvent::Triggered, this, &ASimTraceCharacter::JumpInput);
 	EnhancedInput->BindAction(JumpAction, ETriggerEvent::Completed, this, &ASimTraceCharacter::JumpCompleted);
 	EnhancedInput->BindAction(ResetAction, ETriggerEvent::Started, this, &ASimTraceCharacter::ManualAbortInput);
+	EnhancedInput->BindAction(ExitAction, ETriggerEvent::Started, this, &ASimTraceCharacter::ExitInput);
 
 	const USimTraceGameInstance* SimTraceGameInstance = GetGameInstance<USimTraceGameInstance>();
 	if (SimTraceGameInstance && SimTraceGameInstance->GetRuntimeConfig().Mode != ESimTraceMode::Human)
@@ -190,4 +195,9 @@ void ASimTraceCharacter::ManualAbortInput(const FInputActionValue& Value)
 	{
 		GameMode->RequestManualAbort();
 	}
+}
+
+void ASimTraceCharacter::ExitInput(const FInputActionValue& Value)
+{
+	FPlatformMisc::RequestExit(false);
 }
