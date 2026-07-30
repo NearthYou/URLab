@@ -26,6 +26,7 @@ public class UnrealSimTrace : ModuleRules
 			"NetworkReplayStreaming",
 			"LocalFileNetworkReplayStreaming"
 		});
+
+		PublicIncludePaths.Add(ModuleDirectory);
 	}
 }
-
