@@ -65,6 +65,7 @@ class DatasetFixture:
             "parent_episode_id": "",
             "course_hash": "abc123",
             "start_position_cm": [100.0, 0.0, 96.0],
+            "start_rotation_deg": [0.0, 0.0, 0.0],
             "goal_position_cm": [3100.0, 0.0, 100.0],
             "engine_version": "5.8.1-test",
             "git_revision": "0123456789ab",
@@ -132,6 +133,37 @@ class ValidateDatasetTest(unittest.TestCase):
                 any("depth/000003.png" in error for error in result["errors"])
             )
 
+    def test_depth_path_cannot_alias_rgb_path(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            fixture = DatasetFixture(Path(directory), "episode_aliased_depth")
+            fixture.rows[3]["depth_path"] = "rgb/000003.png"
+            (fixture.path / "trajectory.jsonl").write_text(
+                "".join(json.dumps(row) + "\n" for row in fixture.rows),
+                encoding="utf-8",
+            )
+
+            result = validate_episode(fixture.path)
+
+            self.assertTrue(
+                any("depth_path mismatch" in error for error in result["errors"])
+            )
+
+    def test_non_final_done_is_reported(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            fixture = DatasetFixture(Path(directory), "episode_early_done")
+            fixture.rows[1]["done"] = True
+            fixture.rows[1]["end_reason"] = "goal"
+            (fixture.path / "trajectory.jsonl").write_text(
+                "".join(json.dumps(row) + "\n" for row in fixture.rows),
+                encoding="utf-8",
+            )
+
+            result = validate_episode(fixture.path)
+
+            self.assertTrue(
+                any("done=true before the end" in error for error in result["errors"])
+            )
+
     def test_identical_replay_has_zero_error(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
@@ -193,6 +225,23 @@ class ValidateDatasetTest(unittest.TestCase):
                 result["errors"],
             )
 
+    def test_invalid_manifest_types_are_reported_without_crashing(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            fixture = DatasetFixture(root, "episode_wrong_types")
+            fixture.update_manifest(
+                simulation_hz="thirty",
+                capture_hz=[],
+                git_revision=[],
+                total_bytes="unknown",
+            )
+
+            result = validate_episode(fixture.path)
+            summary = build_report(root, root / "reports")
+
+            self.assertTrue(result["errors"])
+            self.assertGreater(summary["error_count"], 0)
+
     def test_report_handles_constant_action_magnitude(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
@@ -225,6 +274,44 @@ class ValidateDatasetTest(unittest.TestCase):
 
             self.assertEqual(4, summary["performance"]["capture_on_ms"]["count"])
             self.assertEqual(4, summary["performance"]["capture_off_ms"]["count"])
+
+    def test_report_keeps_invalid_manifest_as_validation_error(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            fixture = DatasetFixture(root, "episode_invalid_manifest")
+            (fixture.path / "manifest.json").write_text("{", encoding="utf-8")
+
+            summary = build_report(root, root / "reports")
+
+            self.assertEqual(1, summary["episode_count"])
+            self.assertGreater(summary["error_count"], 0)
+            self.assertTrue((root / "reports" / "summary.json").is_file())
+
+    def test_report_keeps_invalid_replay_as_validation_error(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            DatasetFixture(root, "episode_original")
+            replayed = DatasetFixture(
+                root, "episode_invalid_replay", mode="input-replay"
+            )
+            replayed.update_manifest(parent_episode_id="episode_original")
+            (replayed.path / "trajectory.jsonl").write_text(
+                "not-json\n", encoding="utf-8"
+            )
+
+            summary = build_report(root, root / "reports")
+
+            replay_result = next(
+                episode
+                for episode in summary["episodes"]
+                if episode["episode_id"] == "episode_invalid_replay"
+            )
+            self.assertTrue(
+                any(
+                    "replay comparison failed" in error
+                    for error in replay_result["errors"]
+                )
+            )
 
 
 if __name__ == "__main__":

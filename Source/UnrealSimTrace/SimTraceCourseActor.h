@@ -29,6 +29,7 @@ public:
 	bool WasGoalReached() const { return bGoalReached; }
 
 protected:
+	virtual void BeginPlay() override;
 	virtual void GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const override;
 
 private:
@@ -60,7 +61,7 @@ private:
 	TObjectPtr<UStaticMesh> CubeMesh;
 
 	UPROPERTY()
-	TArray<TObjectPtr<UStaticMeshComponent>> RuntimeMeshes;
+	TMap<FName, TObjectPtr<UStaticMeshComponent>> RuntimeMeshes;
 
 	FSimTraceCourseLayout Layout;
 	bool bGoalReached = false;
@@ -78,7 +79,6 @@ private:
 		const FHitResult& SweepResult);
 
 	void BuildCourse();
-	void ClearCourse();
 	UStaticMeshComponent* AddBox(
 		FName Name,
 		const FTransform& Transform,

@@ -64,6 +64,12 @@ void ASimTraceCourseActor::SetCourseSeed(const int32 InSeed)
 	BuildCourse();
 }
 
+void ASimTraceCourseActor::BeginPlay()
+{
+	Super::BeginPlay();
+	BuildCourse();
+}
+
 void ASimTraceCourseActor::ResetGoal()
 {
 	bGoalReached = false;
@@ -96,7 +102,6 @@ void ASimTraceCourseActor::OnGoalBeginOverlap(
 
 void ASimTraceCourseActor::BuildCourse()
 {
-	ClearCourse();
 	Layout = FSimTraceCourseLayout::Generate(CourseSeed);
 
 	for (const FSimTraceCourseElement& Element : Layout.Elements)
@@ -115,18 +120,6 @@ void ASimTraceCourseActor::BuildCourse()
 	ResetGoal();
 }
 
-void ASimTraceCourseActor::ClearCourse()
-{
-	for (UStaticMeshComponent* Mesh : RuntimeMeshes)
-	{
-		if (IsValid(Mesh))
-		{
-			Mesh->DestroyComponent();
-		}
-	}
-	RuntimeMeshes.Reset();
-}
-
 UStaticMeshComponent* ASimTraceCourseActor::AddBox(
 	const FName Name,
 	const FTransform& Transform,
@@ -138,18 +131,23 @@ UStaticMeshComponent* ASimTraceCourseActor::AddBox(
 		return nullptr;
 	}
 
-	const FName UniqueName = MakeUniqueObjectName(this, UStaticMeshComponent::StaticClass(), Name);
-	UStaticMeshComponent* Mesh = NewObject<UStaticMeshComponent>(this, UniqueName);
-	AddInstanceComponent(Mesh);
-	Mesh->SetupAttachment(SceneRoot);
-	Mesh->SetStaticMesh(CubeMesh);
-	Mesh->SetMobility(EComponentMobility::Static);
+	UStaticMeshComponent* Mesh = RuntimeMeshes.FindRef(Name);
+	if (!IsValid(Mesh))
+	{
+		Mesh = NewObject<UStaticMeshComponent>(this, Name);
+		Mesh->SetNetAddressable();
+		AddInstanceComponent(Mesh);
+		Mesh->SetupAttachment(SceneRoot);
+		Mesh->SetStaticMesh(CubeMesh);
+		Mesh->SetMobility(EComponentMobility::Movable);
+		Mesh->RegisterComponent();
+		RuntimeMeshes.Add(Name, Mesh);
+	}
+
 	Mesh->SetWorldTransform(Transform);
 	Mesh->SetWorldScale3D(Dimensions / 100.0);
 	Mesh->SetCollisionEnabled(bCollisionEnabled ? ECollisionEnabled::QueryAndPhysics : ECollisionEnabled::NoCollision);
 	Mesh->SetCollisionProfileName(bCollisionEnabled ? TEXT("BlockAll") : TEXT("NoCollision"));
-	Mesh->RegisterComponent();
-	RuntimeMeshes.Add(Mesh);
 	return Mesh;
 }
 

@@ -9,11 +9,12 @@ from collections import Counter, defaultdict
 from pathlib import Path
 from typing import Any
 
-import matplotlib
-
-matplotlib.use("Agg")
-import matplotlib.pyplot as plt
 import numpy as np
+
+if __package__:
+    from .simtrace_plots import bot_frame_times_by_capture, write_plots
+else:
+    from simtrace_plots import bot_frame_times_by_capture, write_plots
 
 
 POSITION_TARGETS_CM = {
@@ -21,6 +22,17 @@ POSITION_TARGETS_CM = {
     "p95": 25.0,
     "final": 50.0,
     "start": 0.1,
+}
+
+VALID_MODES = {"human", "bot", "input-replay"}
+VALID_END_REASONS = {
+    "goal",
+    "timeout",
+    "fell",
+    "manual_abort",
+    "capture_error",
+    "io_error",
+    "replay_source_end",
 }
 
 
@@ -69,6 +81,13 @@ def _safe_vector(row: dict[str, Any], field: str, size: int) -> list[float]:
     value = row.get(field)
     if not isinstance(value, list) or len(value) != size:
         raise ValueError(f"{field} must contain {size} numbers")
+    if any(
+        isinstance(item, bool)
+        or not isinstance(item, (int, float))
+        or not math.isfinite(float(item))
+        for item in value
+    ):
+        raise ValueError(f"{field} must contain {size} finite numbers")
     return [float(item) for item in value]
 
 
@@ -125,7 +144,7 @@ def validate_episode(episode: Path | str) -> dict[str, Any]:
             "complete": bool(manifest.get("complete", False)),
         }
     )
-    if not result["complete"]:
+    if manifest.get("complete") is not True:
         errors.append("manifest complete flag is false")
     if manifest.get("schema_version") != 1:
         errors.append("unsupported manifest schema_version")
@@ -136,6 +155,7 @@ def validate_episode(episode: Path | str) -> dict[str, Any]:
         "parent_episode_id",
         "course_hash",
         "start_position_cm",
+        "start_rotation_deg",
         "goal_position_cm",
         "engine_version",
         "git_revision",
@@ -165,11 +185,39 @@ def validate_episode(episode: Path | str) -> dict[str, Any]:
         errors.append(f"manifest field is missing: {field}")
     if manifest.get("episode_id") != episode.name:
         errors.append("manifest episode_id does not match directory name")
-    if manifest.get("git_revision") in {None, "", "unavailable"}:
+    mode = manifest.get("mode")
+    if not isinstance(mode, str) or mode not in VALID_MODES:
+        errors.append("manifest mode is invalid")
+    if (
+        not isinstance(manifest.get("seed"), int)
+        or isinstance(manifest.get("seed"), bool)
+    ):
+        errors.append("manifest seed must be an integer")
+    if not isinstance(manifest.get("parent_episode_id"), str):
+        errors.append("manifest parent_episode_id must be a string")
+    if not isinstance(manifest.get("course_hash"), str) or not manifest.get(
+        "course_hash"
+    ):
+        errors.append("manifest course_hash must be a non-empty string")
+    for field, size in (
+        ("start_position_cm", 3),
+        ("start_rotation_deg", 3),
+        ("goal_position_cm", 3),
+    ):
+        try:
+            _safe_vector(manifest, field, size)
+        except (TypeError, ValueError) as error:
+            errors.append(f"manifest: {error}")
+    git_revision = manifest.get("git_revision")
+    if (
+        not isinstance(git_revision, str)
+        or not git_revision
+        or git_revision == "unavailable"
+    ):
         errors.append("manifest git_revision is unavailable")
     if manifest.get("simulation_hz") != 30:
         errors.append("manifest simulation_hz must be 30")
-    if manifest.get("capture_hz") not in {0, 10}:
+    if manifest.get("capture_hz") not in (0, 10):
         errors.append("manifest capture_hz must be 0 or 10")
     if manifest.get("capture_interval_sim_frames") != 3:
         errors.append("manifest capture_interval_sim_frames must be 3")
@@ -183,6 +231,12 @@ def validate_episode(episode: Path | str) -> dict[str, Any]:
         errors.append("manifest depth_encoding must be uint16_linear_cm")
     if manifest.get("depth_max_cm") != 2000:
         errors.append("manifest depth_max_cm must be 2000")
+    manifest_end_reason = manifest.get("end_reason")
+    if (
+        not isinstance(manifest_end_reason, str)
+        or manifest_end_reason not in VALID_END_REASONS
+    ):
+        errors.append("manifest end_reason is invalid")
 
     trajectory_path = episode / "trajectory.jsonl"
     if not trajectory_path.exists():
@@ -197,8 +251,8 @@ def validate_episode(episode: Path | str) -> dict[str, Any]:
 
     result["_rows"] = rows
     result["trajectory_frames"] = len(rows)
-    simulation_hz = float(manifest.get("simulation_hz", 30))
-    capture_hz = float(manifest.get("capture_hz", 0))
+    simulation_hz = 30.0
+    capture_hz = 10.0 if manifest.get("capture_hz") == 10 else 0.0
     expected_rgb: set[str] = set()
     expected_depth: set[str] = set()
     captured_count = 0
@@ -207,41 +261,86 @@ def validate_episode(episode: Path | str) -> dict[str, Any]:
 
     for expected_frame, row in enumerate(rows):
         frame = row.get("sim_frame")
-        if frame != expected_frame:
+        if (
+            not isinstance(frame, int)
+            or isinstance(frame, bool)
+            or frame != expected_frame
+        ):
             errors.append(
                 f"trajectory frame {expected_frame} has sim_frame={frame}"
             )
         timestamp = row.get("timestamp_s")
         expected_timestamp = expected_frame / simulation_hz
-        if not isinstance(timestamp, (int, float)) or not math.isclose(
-            float(timestamp), expected_timestamp, abs_tol=1e-5
+        if (
+            isinstance(timestamp, bool)
+            or not isinstance(timestamp, (int, float))
+            or not math.isfinite(float(timestamp))
+            or not math.isclose(
+                float(timestamp), expected_timestamp, abs_tol=1e-5
+            )
         ):
             errors.append(
                 f"frame {expected_frame} timestamp mismatch: "
                 f"{timestamp} != {expected_timestamp}"
             )
 
-        captured = bool(row.get("captured", False))
-        dropped = bool(row.get("capture_dropped", False))
+        delta = row.get("delta_s")
+        expected_delta = 1.0 / simulation_hz
+        if (
+            isinstance(delta, bool)
+            or not isinstance(delta, (int, float))
+            or not math.isfinite(float(delta))
+            or not math.isclose(float(delta), expected_delta, abs_tol=1e-5)
+        ):
+            errors.append(
+                f"frame {expected_frame} delta mismatch: "
+                f"{delta} != {expected_delta}"
+            )
+        if row.get("schema_version") != 1:
+            errors.append(f"frame {expected_frame} has unsupported schema_version")
+
+        captured_value = row.get("captured")
+        dropped_value = row.get("capture_dropped")
+        if not isinstance(captured_value, bool):
+            errors.append(f"frame {expected_frame} captured must be boolean")
+        if not isinstance(dropped_value, bool):
+            errors.append(f"frame {expected_frame} capture_dropped must be boolean")
+        captured = captured_value is True
+        dropped = dropped_value is True
         if captured and dropped:
             errors.append(f"frame {expected_frame} is both captured and dropped")
         if captured:
             captured_count += 1
             rgb_relative = row.get("rgb_path")
             depth_relative = row.get("depth_path")
-            if not isinstance(rgb_relative, str) or not isinstance(
-                depth_relative, str
-            ):
+            canonical_rgb = f"rgb/{expected_frame:06d}.png"
+            canonical_depth = f"depth/{expected_frame:06d}.png"
+            expected_rgb.add(canonical_rgb)
+            expected_depth.add(canonical_depth)
+            if not isinstance(rgb_relative, str) or not isinstance(depth_relative, str):
                 errors.append(
                     f"frame {expected_frame} captured without both image paths"
                 )
             else:
-                expected_rgb.add(rgb_relative.replace("\\", "/"))
-                expected_depth.add(depth_relative.replace("\\", "/"))
-                for relative in (rgb_relative, depth_relative):
-                    image_path = episode / relative
-                    if not image_path.exists():
-                        errors.append(f"missing image: {relative}")
+                normalized_rgb = rgb_relative.replace("\\", "/")
+                normalized_depth = depth_relative.replace("\\", "/")
+                if normalized_rgb != canonical_rgb:
+                    errors.append(
+                        f"frame {expected_frame} rgb_path mismatch: "
+                        f"{normalized_rgb} != {canonical_rgb}"
+                    )
+                if normalized_depth != canonical_depth:
+                    errors.append(
+                        f"frame {expected_frame} depth_path mismatch: "
+                        f"{normalized_depth} != {canonical_depth}"
+                    )
+            for relative in (canonical_rgb, canonical_depth):
+                if not (episode / relative).exists():
+                    errors.append(f"missing image: {relative}")
+        elif row.get("rgb_path") is not None or row.get("depth_path") is not None:
+            errors.append(
+                f"frame {expected_frame} has image paths without captured=true"
+            )
         if dropped:
             dropped_count += 1
 
@@ -257,17 +356,44 @@ def validate_episode(episode: Path | str) -> dict[str, Any]:
             move = _safe_vector(row, "move_input", 2)
             look = _safe_vector(row, "look_input", 2)
             _safe_vector(row, "position_cm", 3)
+            _safe_vector(row, "rotation_deg", 3)
+            _safe_vector(row, "velocity_cm_s", 3)
+            _safe_vector(row, "goal_relative_cm", 3)
         except (TypeError, ValueError) as error:
             errors.append(f"frame {expected_frame}: {error}")
             continue
 
+        for field in ("jump_pressed", "collision", "done"):
+            if not isinstance(row.get(field), bool):
+                errors.append(f"frame {expected_frame} {field} must be boolean")
+        end_reason = row.get("end_reason")
+        if not isinstance(end_reason, str):
+            errors.append(f"frame {expected_frame} end_reason must be a string")
+        elif expected_frame < len(rows) - 1:
+            if row.get("done") is True:
+                errors.append(f"frame {expected_frame} has done=true before the end")
+            if end_reason:
+                errors.append(
+                    f"frame {expected_frame} has an end_reason before the end"
+                )
+
         result["_move_magnitudes"].append(math.hypot(*move))
         result["_look_magnitudes"].append(math.hypot(*look))
-        result["_jump_values"].append(bool(row.get("jump_pressed", False)))
-        result["_collision_values"].append(bool(row.get("collision", False)))
+        result["_jump_values"].append(row.get("jump_pressed") is True)
+        result["_collision_values"].append(row.get("collision") is True)
         frame_time = row.get("frame_time_ms")
-        if isinstance(frame_time, (int, float)) and float(frame_time) >= 0:
+        if (
+            not isinstance(frame_time, bool)
+            and isinstance(frame_time, (int, float))
+            and math.isfinite(float(frame_time))
+            and float(frame_time) >= 0
+        ):
             result["_frame_times_ms"].append(float(frame_time))
+        else:
+            errors.append(
+                f"frame {expected_frame} frame_time_ms must be a non-negative "
+                "finite number"
+            )
 
     result["capture_frames"] = captured_count
     result["capture_dropped"] = dropped_count
@@ -278,6 +404,12 @@ def validate_episode(episode: Path | str) -> dict[str, Any]:
     else:
         if rows[-1].get("done") is not True:
             errors.append("last trajectory row must have done=true")
+        final_end_reason = rows[-1].get("end_reason")
+        if (
+            not isinstance(final_end_reason, str)
+            or final_end_reason not in VALID_END_REASONS
+        ):
+            errors.append("last trajectory row has an invalid end_reason")
         if rows[-1].get("end_reason") != manifest.get("end_reason"):
             errors.append("trajectory and manifest end_reason differ")
 
@@ -291,6 +423,17 @@ def validate_episode(episode: Path | str) -> dict[str, Any]:
         errors.append("manifest capture_dropped does not match trajectory.jsonl")
     if dropped_count:
         errors.append(f"episode contains {dropped_count} dropped captures")
+    if capture_hz == 0 and captured_count:
+        errors.append("capture_hz is zero but captured frames are present")
+    duration = manifest.get("duration_s")
+    expected_duration = len(rows) / simulation_hz
+    if (
+        isinstance(duration, bool)
+        or not isinstance(duration, (int, float))
+        or not math.isfinite(float(duration))
+        or not math.isclose(float(duration), expected_duration, abs_tol=1e-5)
+    ):
+        errors.append("manifest duration_s does not match trajectory length")
 
     actual_rgb = {
         path.relative_to(episode).as_posix()
@@ -305,8 +448,8 @@ def validate_episode(episode: Path | str) -> dict[str, Any]:
     for orphan in sorted(actual_depth - expected_depth):
         errors.append(f"orphan Depth image: {orphan}")
 
-    width = int(manifest.get("image_width", 320))
-    height = int(manifest.get("image_height", 180))
+    width = 320
+    height = 180
     for relative in sorted(expected_rgb & actual_rgb):
         try:
             image_width, image_height, bit_depth, color_type = _png_header(
@@ -342,11 +485,19 @@ def validate_episode(episode: Path | str) -> dict[str, Any]:
     files = _episode_files(episode)
     result["file_count"] = len(files)
     result["total_bytes"] = sum(path.stat().st_size for path in files)
-    if "file_count" in manifest and manifest["file_count"] != len(files):
-        errors.append("manifest file_count does not match files on disk")
+    manifest_file_count = manifest.get("file_count")
     if (
-        "total_bytes" in manifest
-        and int(manifest["total_bytes"]) != result["total_bytes"]
+        not isinstance(manifest_file_count, int)
+        or isinstance(manifest_file_count, bool)
+        or manifest_file_count != len(files)
+    ):
+        errors.append("manifest file_count does not match files on disk")
+    manifest_total_bytes = manifest.get("total_bytes")
+    if (
+        not isinstance(manifest_total_bytes, (int, float))
+        or isinstance(manifest_total_bytes, bool)
+        or not math.isfinite(float(manifest_total_bytes))
+        or float(manifest_total_bytes) != result["total_bytes"]
     ):
         errors.append("manifest total_bytes does not match files on disk")
     return result
@@ -445,137 +596,6 @@ def _distribution(values: list[float]) -> dict[str, float | int]:
     }
 
 
-def _bot_frame_times_by_capture(
-    results: list[dict[str, Any]],
-) -> tuple[list[float], list[float]]:
-    capture_on = [
-        value
-        for result in results
-        if result["mode"] == "bot" and result.get("_capture_hz", 0) > 0
-        for value in result["_frame_times_ms"]
-    ]
-    capture_off = [
-        value
-        for result in results
-        if result["mode"] == "bot" and result.get("_capture_hz", 0) == 0
-        for value in result["_frame_times_ms"]
-    ]
-    return capture_on, capture_off
-
-
-def _write_plots(
-    output: Path,
-    results: list[dict[str, Any]],
-    comparisons: list[dict[str, Any]],
-) -> list[str]:
-    plot_paths: list[str] = []
-    episode_labels = [
-        f"{index:02d} {result['mode']} s{result['seed']}"
-        for index, result in enumerate(results, start=1)
-    ]
-    sizes_mb = [result["total_bytes"] / (1024 * 1024) for result in results]
-
-    plt.figure(figsize=(max(8, len(results) * 0.4), 4.5))
-    plt.bar(range(len(results)), sizes_mb, color="#277da1")
-    plt.xticks(range(len(results)), episode_labels, rotation=55, ha="right", fontsize=7)
-    plt.ylabel("MiB")
-    plt.title("Episode sizes")
-    plt.tight_layout()
-    path = output / "episode_sizes.png"
-    plt.savefig(path, dpi=150)
-    plt.close()
-    plot_paths.append(path.name)
-
-    outcomes = Counter(result["end_reason"] for result in results)
-    plt.figure(figsize=(7, 4))
-    plt.bar(outcomes.keys(), outcomes.values(), color="#43aa8b")
-    plt.ylabel("Episodes")
-    plt.title("Episode outcomes")
-    plt.tight_layout()
-    path = output / "episode_outcomes.png"
-    plt.savefig(path, dpi=150)
-    plt.close()
-    plot_paths.append(path.name)
-
-    plt.figure(figsize=(8, 4.5))
-    plotted = False
-    action_bins = np.linspace(0.0, math.sqrt(2.0) + 1e-6, 31)
-    for mode in ("human", "bot", "input-replay"):
-        values = [
-            value
-            for result in results
-            if result["mode"] == mode
-            for value in result["_move_magnitudes"]
-        ]
-        if values:
-            weights = np.full(len(values), 100.0 / len(values))
-            plt.hist(
-                values,
-                bins=action_bins,
-                weights=weights,
-                alpha=0.45,
-                label=mode,
-            )
-            plotted = True
-    if plotted:
-        plt.legend()
-    plt.xlabel("Move input magnitude")
-    plt.ylabel("Samples percent")
-    plt.title("Action distributions")
-    plt.tight_layout()
-    path = output / "action_distributions.png"
-    plt.savefig(path, dpi=150)
-    plt.close()
-    plot_paths.append(path.name)
-
-    plt.figure(figsize=(8, 4.5))
-    if comparisons:
-        labels = [f"seed {item['seed']}" for item in comparisons]
-        x = np.arange(len(labels))
-        plt.bar(
-            x - 0.2,
-            [item["mean_position_error_cm"] for item in comparisons],
-            width=0.4,
-            label="mean",
-        )
-        plt.bar(
-            x + 0.2,
-            [item["p95_position_error_cm"] for item in comparisons],
-            width=0.4,
-            label="p95",
-        )
-        plt.xticks(x, labels, rotation=60, ha="right", fontsize=7)
-        plt.legend()
-    plt.ylabel("Position error cm")
-    plt.title("JSON input replay error")
-    plt.tight_layout()
-    path = output / "replay_error.png"
-    plt.savefig(path, dpi=150)
-    plt.close()
-    plot_paths.append(path.name)
-
-    capture_on, capture_off = _bot_frame_times_by_capture(results)
-    plt.figure(figsize=(7, 4.5))
-    data: list[list[float]] = []
-    labels: list[str] = []
-    if capture_off:
-        data.append(capture_off)
-        labels.append("capture off")
-    if capture_on:
-        data.append(capture_on)
-        labels.append("capture on")
-    if data:
-        plt.boxplot(data, tick_labels=labels, showfliers=False)
-    plt.ylabel("Frame time ms")
-    plt.title("Bot capture performance")
-    plt.tight_layout()
-    path = output / "capture_performance.png"
-    plt.savefig(path, dpi=150)
-    plt.close()
-    plot_paths.append(path.name)
-    return plot_paths
-
-
 def build_report(
     episodes_root: Path | str, output_directory: Path | str | None = None
 ) -> dict[str, Any]:
@@ -602,10 +622,21 @@ def build_report(
     for path, result in zip(episode_paths, results, strict=True):
         manifest_path = path / "manifest.json"
         if manifest_path.exists():
-            manifest = _load_json(manifest_path)
-            manifests[result["episode_id"]] = manifest
-            paths_by_id[result["episode_id"]] = path
-            result["_capture_hz"] = float(manifest.get("capture_hz", 0))
+            try:
+                manifest = _load_json(manifest_path)
+            except (OSError, ValueError, json.JSONDecodeError):
+                result["_capture_hz"] = 0.0
+                continue
+            episode_id = str(manifest.get("episode_id", result["episode_id"]))
+            manifests[episode_id] = manifest
+            paths_by_id[episode_id] = path
+            capture_hz = manifest.get("capture_hz", 0)
+            result["_capture_hz"] = (
+                float(capture_hz)
+                if not isinstance(capture_hz, bool)
+                and isinstance(capture_hz, (int, float))
+                else 0.0
+            )
         else:
             result["_capture_hz"] = 0.0
 
@@ -618,7 +649,16 @@ def build_report(
         parent_path = paths_by_id.get(parent_id)
         replayed_path = paths_by_id.get(result["episode_id"])
         if parent_path and replayed_path:
-            comparisons.append(compare_episodes(parent_path, replayed_path))
+            try:
+                comparisons.append(compare_episodes(parent_path, replayed_path))
+            except (
+                OSError,
+                ValueError,
+                KeyError,
+                TypeError,
+                json.JSONDecodeError,
+            ) as error:
+                result["errors"].append(f"replay comparison failed: {error}")
         else:
             result["warnings"].append(
                 f"parent episode is unavailable for comparison: {parent_id}"
@@ -653,7 +693,7 @@ def build_report(
             else 0.0,
         }
 
-    capture_on, capture_off = _bot_frame_times_by_capture(results)
+    capture_on, capture_off = bot_frame_times_by_capture(results)
     performance = {
         "capture_on_ms": _distribution(capture_on),
         "capture_off_ms": _distribution(capture_off),
@@ -682,7 +722,7 @@ def build_report(
         for seed, group in seed_groups.items()
     }
 
-    plot_files = _write_plots(output, results, comparisons)
+    plot_files = write_plots(output, results, comparisons)
     public_results = []
     for result in results:
         public_results.append(

@@ -173,7 +173,7 @@ void ASimTraceGameMode::StartEpisode()
 	USimTraceGameInstance* GameInstance = GetGameInstance<USimTraceGameInstance>();
 	if (!GameInstance || !Course)
 	{
-		FPlatformMisc::RequestExit(false);
+		FPlatformMisc::RequestExitWithStatus(false, 1);
 		return;
 	}
 
@@ -181,12 +181,16 @@ void ASimTraceGameMode::StartEpisode()
 	int32 EpisodeSeed = Config.Seed + EpisodeIndex;
 	if (Config.Mode == ESimTraceMode::InputReplay && ReplayActions.IsEmpty())
 	{
-		if (!LoadReplayInput(EpisodeSeed))
+		if (!LoadReplayInput(ReplaySeed))
 		{
 			UE_LOG(LogSimTrace, Error, TEXT("Unable to load input replay: %s"), *Config.InputPath);
-			FPlatformMisc::RequestExit(false);
+			FPlatformMisc::RequestExitWithStatus(false, 1);
 			return;
 		}
+	}
+	if (Config.Mode == ESimTraceMode::InputReplay)
+	{
+		EpisodeSeed = ReplaySeed;
 	}
 
 	Course->SetCourseSeed(EpisodeSeed);
@@ -207,7 +211,7 @@ void ASimTraceGameMode::StartEpisode()
 	if (!SimTraceCharacter)
 	{
 		UE_LOG(LogSimTrace, Error, TEXT("No SimTrace character could be created"));
-		FPlatformMisc::RequestExit(false);
+		FPlatformMisc::RequestExitWithStatus(false, 1);
 		return;
 	}
 
@@ -224,7 +228,7 @@ void ASimTraceGameMode::StartEpisode()
 			ParentEpisodeId))
 	{
 		UE_LOG(LogSimTrace, Error, TEXT("Unable to start episode recorder"));
-		FPlatformMisc::RequestExit(false);
+		FPlatformMisc::RequestExitWithStatus(false, 1);
 		return;
 	}
 
@@ -336,17 +340,57 @@ bool ASimTraceGameMode::LoadReplayInput(int32& OutSeed)
 	}
 	InputPath = FPaths::ConvertRelativePathToFull(InputPath);
 
+	const FString EpisodeDirectory = FPaths::GetPath(InputPath);
+	const FString ManifestPath = FPaths::Combine(EpisodeDirectory, TEXT("manifest.json"));
+	FString ManifestJson;
+	if (!FFileHelper::LoadFileToString(ManifestJson, *ManifestPath))
+	{
+		return false;
+	}
+
+	TSharedPtr<FJsonObject> Manifest;
+	const TSharedRef<TJsonReader<>> ManifestReader =
+		TJsonReaderFactory<>::Create(ManifestJson);
+	if (!FJsonSerializer::Deserialize(ManifestReader, Manifest) || !Manifest.IsValid())
+	{
+		return false;
+	}
+
+	FString SourceEpisodeId;
+	double SeedValue = 0.0;
+	double TrajectoryFramesValue = 0.0;
+	bool bComplete = false;
+	if (!Manifest->TryGetStringField(TEXT("episode_id"), SourceEpisodeId) ||
+		SourceEpisodeId != FPaths::GetCleanFilename(EpisodeDirectory) ||
+		!Manifest->TryGetNumberField(TEXT("seed"), SeedValue) ||
+		SeedValue != FMath::RoundToDouble(SeedValue) ||
+		SeedValue < static_cast<double>(MIN_int32) ||
+		SeedValue > static_cast<double>(MAX_int32) ||
+		!Manifest->TryGetNumberField(TEXT("trajectory_frames"), TrajectoryFramesValue) ||
+		!Manifest->TryGetBoolField(TEXT("complete"), bComplete) ||
+		!bComplete)
+	{
+		return false;
+	}
+
 	TArray<FString> Lines;
 	if (!FFileHelper::LoadFileToStringArray(Lines, *InputPath))
 	{
 		return false;
 	}
+	if (Lines.IsEmpty() ||
+		TrajectoryFramesValue != static_cast<double>(Lines.Num()))
+	{
+		return false;
+	}
 
-	ReplayActions.Reset();
-	for (const FString& Line : Lines)
+	TArray<FSimTraceActionState> LoadedActions;
+	LoadedActions.Reserve(Lines.Num());
+	for (int32 Index = 0; Index < Lines.Num(); ++Index)
 	{
 		TSharedPtr<FJsonObject> Object;
-		const TSharedRef<TJsonReader<>> Reader = TJsonReaderFactory<>::Create(Line);
+		const TSharedRef<TJsonReader<>> Reader =
+			TJsonReaderFactory<>::Create(Lines[Index]);
 		if (!FJsonSerializer::Deserialize(Reader, Object) || !Object.IsValid())
 		{
 			return false;
@@ -355,36 +399,51 @@ bool ASimTraceGameMode::LoadReplayInput(int32& OutSeed)
 		FSimTraceActionState Action;
 		const TArray<TSharedPtr<FJsonValue>>* Move = nullptr;
 		const TArray<TSharedPtr<FJsonValue>>* Look = nullptr;
-		if (Object->TryGetArrayField(TEXT("move_input"), Move) && Move && Move->Num() >= 2)
+		double SimFrameValue = 0.0;
+		double TimestampValue = 0.0;
+		bool bDone = false;
+		if (!Object->TryGetNumberField(TEXT("sim_frame"), SimFrameValue) ||
+			SimFrameValue != static_cast<double>(Index) ||
+			!Object->TryGetNumberField(TEXT("timestamp_s"), TimestampValue) ||
+			!FMath::IsNearlyEqual(
+				TimestampValue,
+				FSimTraceTrajectorySample::TimestampForFrame(Index),
+				1.0e-5) ||
+			!Object->TryGetArrayField(TEXT("move_input"), Move) ||
+			!Move ||
+			Move->Num() != 2 ||
+			!Object->TryGetArrayField(TEXT("look_input"), Look) ||
+			!Look ||
+			Look->Num() != 2 ||
+			!Object->TryGetBoolField(TEXT("jump_pressed"), Action.bJumpPressed) ||
+			!Object->TryGetBoolField(TEXT("done"), bDone) ||
+			bDone != (Index == Lines.Num() - 1))
 		{
-			Action.Move = FVector2D((*Move)[0]->AsNumber(), (*Move)[1]->AsNumber());
+			return false;
 		}
-		if (Object->TryGetArrayField(TEXT("look_input"), Look) && Look && Look->Num() >= 2)
+		for (const TSharedPtr<FJsonValue>& Value : *Move)
 		{
-			Action.Look = FVector2D((*Look)[0]->AsNumber(), (*Look)[1]->AsNumber());
+			if (!Value.IsValid() || Value->Type != EJson::Number)
+			{
+				return false;
+			}
 		}
-		Object->TryGetBoolField(TEXT("jump_pressed"), Action.bJumpPressed);
-		ReplayActions.Add(Action);
+		for (const TSharedPtr<FJsonValue>& Value : *Look)
+		{
+			if (!Value.IsValid() || Value->Type != EJson::Number)
+			{
+				return false;
+			}
+		}
+		Action.Move = FVector2D((*Move)[0]->AsNumber(), (*Move)[1]->AsNumber());
+		Action.Look = FVector2D((*Look)[0]->AsNumber(), (*Look)[1]->AsNumber());
+		LoadedActions.Add(Action);
 	}
 
-	const FString EpisodeDirectory = FPaths::GetPath(InputPath);
-	ParentEpisodeId = FPaths::GetCleanFilename(EpisodeDirectory);
-	const FString ManifestPath = FPaths::Combine(EpisodeDirectory, TEXT("manifest.json"));
-	FString ManifestJson;
-	if (FFileHelper::LoadFileToString(ManifestJson, *ManifestPath))
-	{
-		TSharedPtr<FJsonObject> Manifest;
-		const TSharedRef<TJsonReader<>> Reader = TJsonReaderFactory<>::Create(ManifestJson);
-		double SeedValue = OutSeed;
-		if (FJsonSerializer::Deserialize(Reader, Manifest) &&
-			Manifest.IsValid() &&
-			Manifest->TryGetNumberField(TEXT("seed"), SeedValue))
-		{
-			OutSeed = static_cast<int32>(SeedValue);
-		}
-	}
-
-	return !ReplayActions.IsEmpty();
+	ReplayActions = MoveTemp(LoadedActions);
+	ParentEpisodeId = SourceEpisodeId;
+	OutSeed = static_cast<int32>(SeedValue);
+	return true;
 }
 
 FSimTraceActionState ASimTraceGameMode::BuildBotAction() const

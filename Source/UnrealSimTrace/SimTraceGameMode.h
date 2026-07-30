@@ -35,6 +35,7 @@ private:
 
 	TArray<FSimTraceActionState> ReplayActions;
 	FString ParentEpisodeId;
+	int32 ReplaySeed = 0;
 	int32 EpisodeIndex = 0;
 	mutable int32 BotWaypointIndex = 0;
 	bool bEpisodeActive = false;

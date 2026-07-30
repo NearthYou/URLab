@@ -62,7 +62,8 @@ flowchart LR
 | JSONL과 manifest | `EpisodeRecorderComponent` |
 | RGB와 Depth, 비동기 PNG | `SimTraceCaptureComponent` |
 | native Replay | `SimTraceGameInstance` |
-| 데이터 검증과 그래프 | `Scripts/validate_dataset.py` |
+| 데이터 검증과 보고서 집계 | `Scripts/validate_dataset.py` |
+| Matplotlib 그래프 생성 | `Scripts/simtrace_plots.py` |
 
 ## 요구 환경
 
