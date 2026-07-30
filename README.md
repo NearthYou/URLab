@@ -6,7 +6,8 @@ Unreal SimTrace는 Unreal 플레이를 재현 가능한 AI 연구 데이터로 �
 
 ## 구현 상태
 
-자동화 가능한 범위는 구현과 검증을 완료했다.
+자동화 가능한 범위는 구현과 검증을 완료했다. 아래 수치와 파일은
+`ff1b9a7bca35`에서 새로 수집한 실제 실행 결과다.
 
 | 항목 | 현재 결과 |
 |---|---:|
@@ -18,21 +19,37 @@ Unreal SimTrace는 Unreal 플레이를 재현 가능한 AI 연구 데이터로 �
 | 누락 capture | 0 |
 | capture drop | 0 |
 | validator 오류와 경고 | 0 / 0 |
-| JSON 재생 최대 평균 오차 | 0.000000477 cm |
-| JSON 재생 최대 p95 오차 | 0.000000477 cm |
-| 총 검증 데이터 크기 | 39,672,657 bytes, 약 37.83 MiB |
-| Git revision | `77e7d5e7c55c` |
+| JSON 재생 최대 평균 오차 | 0.000000 cm |
+| JSON 재생 최대 p95 오차 | 0.000000 cm |
+| 총 검증 데이터 크기 | 39,678,350 bytes, 약 37.84 MiB |
+| 측정 Git revision | `ff1b9a7bca35` |
 
 봇 캡처 on/off는 각각 1,650프레임을 비교했다.
 
 | 측정 | Capture off | Capture on |
 |---|---:|---:|
-| 중앙 frame time | 38.573 ms | 38.063 ms |
+| 중앙 frame time | 36.619 ms | 36.105 ms |
 | frame 수 | 1,650 | 1,650 |
 
-계산된 median FPS drop은 -1.339%였다. 이 실행에서는 캡처로 인한 저하가 검출되지 않았으며, 작은 음수 값은 실행 간 변동 범위로 해석한다.
+계산된 median FPS drop은 -1.422%였다. 이 실행에서는 캡처로 인한 저하가 검출되지 않았으며, 작은 음수 값은 실행 간 변동 범위로 해석한다.
 
-사람 플레이 10회와 최종 60초 화면 녹화는 실제 사용자 입력이 필요한 마지막 작업이다. 아래 명령 한 번으로 시드 1000부터 1009까지 연속 수집할 수 있다.
+전체 `Saved/SimTrace` 데이터는 Git에서 제외하지만, 검증된 대표 episode와
+보고서는 저장소의 [`docs/evidence`](docs/evidence)에 보존한다.
+
+- [60초 실제 데이터 증거 영상](docs/evidence/simtrace_demo.mp4)
+- [검증 보고서](docs/evidence/reports/summary.md)
+- [실제 manifest](docs/evidence/sample/manifest.json)
+- [실제 trajectory 발췌](docs/evidence/sample/trajectory_excerpt.jsonl)
+- [16-bit Depth 원본](docs/evidence/sample/depth.png)
+- [Unreal native Replay archive](docs/evidence/sample/native_replay.replay)
+
+![실행 중 수집된 1인칭 RGB](docs/evidence/runtime_first_person.png)
+
+![동일 sim frame의 RGB와 Depth](docs/evidence/rgb_depth_pair.png)
+
+공개 증거에는 자동 생성한 bot, capture baseline, input-replay episode만 포함한다.
+사람 플레이 10회는 자동 데이터로 가장하지 않으며 실제 사용자가 아래 명령으로
+수집해야 한다.
 
 ## 아키텍처
 
@@ -68,6 +85,7 @@ warm-up하고, 그 다음 프레임부터 recorder와 native Replay를 함께 �
 | native Replay | `SimTraceGameInstance` |
 | 데이터 검증과 보고서 집계 | `Scripts/validate_dataset.py` |
 | Matplotlib 그래프 생성 | `Scripts/simtrace_plots.py` |
+| 추적 가능한 샘플과 60초 증거 영상 | `Scripts/publish_evidence.py` |
 
 ## 요구 환경
 
@@ -76,6 +94,7 @@ warm-up하고, 그 다음 프레임부터 recorder와 native Replay를 함께 �
 - PowerShell 7 또는 Windows PowerShell
 - `uv`
 - Python 3.13
+- `ffmpeg`, `ffprobe`는 증거 영상 갱신에만 필요
 
 프로젝트 전용 `.uasset`은 필요하지 않다. Engine의 `/Engine/BasicShapes/Cube`만 런타임에 참조한다.
 
@@ -298,6 +317,17 @@ uv run python Scripts/validate_dataset.py report `
 - `replay_error.png`
 - `capture_performance.png`
 
+검증된 결과에서 저장소용 소형 증거 번들을 갱신한다.
+
+```powershell
+uv run python Scripts/publish_evidence.py
+```
+
+이 명령은 대표 manifest, trajectory 발췌, RGB와 16-bit Depth 원본,
+native Replay archive, 보고서와 정확히 60초인 MP4를 `docs/evidence`에
+생성한다. 영상은 실제 수집 RGB 프레임과 실제 보고서만 사용하며 `ffprobe`로
+길이를 검사한다.
+
 validator는 다음을 실패로 처리한다.
 
 - partial manifest 또는 완료 flag 오류
@@ -318,7 +348,7 @@ validator는 다음을 실패로 처리한다.
 Python 단위 테스트를 실행한다.
 
 ```powershell
-uv run python -m unittest Scripts.tests.test_validate_dataset
+uv run python -m unittest discover -s Scripts/tests -t .
 ```
 
 Unreal Automation Tests를 실행한다.
@@ -349,27 +379,22 @@ Unreal Automation Tests를 실행한다.
 - 상수에 가까운 행동값의 report 생성
 - 성능 비교에서 bot capture on/off만 선택
 
-## 60초 시연 순서
+## 60초 증거 영상
+
+[`docs/evidence/simtrace_demo.mp4`](docs/evidence/simtrace_demo.mp4)는
+`Scripts/publish_evidence.py`가 실제 수집 결과에서 생성한다.
 
 | 시간 | 화면 |
 |---|---|
-| 0초에서 10초 | C++로 생성된 코스와 봇 또는 사람 플레이 |
-| 10초에서 20초 | episode 폴더, manifest, trajectory JSONL |
-| 20초에서 30초 | 같은 frame 번호의 RGB와 16-bit Depth |
-| 30초에서 40초 | JSON 입력 재생과 위치 오차 report |
-| 40초에서 50초 | 같은 episode의 Unreal native Replay |
-| 50초에서 60초 | 누락 0, drop 0, 용량과 성능 그래프 |
+| 0초에서 5초 | 프로젝트와 측정 commit |
+| 5초에서 45초 | C++ 런타임 코스의 실제 봇 RGB |
+| 45초에서 50초 | 같은 sim frame의 RGB와 16-bit Depth |
+| 50초에서 55초 | JSON 입력 재생 위치 오차 |
+| 55초에서 60초 | 유효 episode, drop과 replay 결과 |
 
-녹화 직전에 사람 10회 수집을 마치고 report 명령을 다시 실행하면 행동 분포 그래프에 human과 bot이 함께 표시된다.
-
-## 알려진 한계
-
-- Unreal native Replay는 같은 Unreal 5.8.1 환경에서 재생하는 것을 기준으로 한다.
-- 수치 재현성 평가는 JSON 입력 재생이 담당한다. Native Replay는 엔진 수준의 시각 재생 증명이다.
-- 캡처 readback은 게임 스레드에서 실행되며 PNG 압축과 저장만 thread pool에서 수행한다.
-- fixed timestep과 운영체제 scheduling 때문에 실제 frame time은 정확히 33.333 ms로 고정되지 않는다.
-- 현재 코스와 캐릭터는 하나이며 ROS2, Isaac Sim, PPO, LLM NPC, 전투는 범위 밖이다.
-- Human 10회 데이터와 최종 시연 영상은 실제 조작자가 생성해야 한다.
+면접용 라이브 화면 녹화가 필요하면 사람 10회 수집을 마치고 report와
+publish 명령을 다시 실행한 뒤 별도로 촬영한다. 현재 저장된 MP4는
+재현 가능한 자동 증거 영상이며 사람 조작 영상으로 표시하지 않는다.
 
 ## 공식 API 기준
 

@@ -1,0 +1,61 @@
+{
+  "schema_version": 1,
+  "generated_utc": "2026-07-30T17:24:40.232999Z",
+  "source_episode_id": "episode_20260730T164634194Z_bot_s1000_00",
+  "source_sim_frame": 81,
+  "git_revision": "ff1b9a7bca35",
+  "course_hash": "2960b24b",
+  "summary": {
+    "episode_count": 23,
+    "valid_episode_count": 23,
+    "error_count": 0,
+    "warning_count": 0,
+    "total_bytes": 39678350,
+    "missing_capture_frames": 0,
+    "capture_dropped": 0,
+    "modes": {
+      "bot": 20,
+      "input-replay": 3
+    },
+    "outcomes": {
+      "goal": 20,
+      "replay_source_end": 3
+    },
+    "replay_comparison_count": 3,
+    "performance": {
+      "capture_on_ms": {
+        "count": 1650,
+        "mean": 37.415768906022564,
+        "p50": 36.10505163669586,
+        "p95": 45.42424809187651
+      },
+      "capture_off_ms": {
+        "count": 1650,
+        "mean": 37.91249333909064,
+        "p50": 36.6185512393713,
+        "p95": 46.00058663636446
+      },
+      "median_fps_drop_percent": -1.4222375523582853
+    }
+  },
+  "video_duration_s": 60.0,
+  "artifacts_sha256": {
+    "README.md": "58e425443e86b34c438e694ba6e65b814fa4b049ff8cca95dfabc7ce1b770862",
+    "reports/action_distributions.png": "9e2c4ee5d0f75c6df207f9c6a1ea50d8557e1d778669804a7b751963d394eea6",
+    "reports/capture_performance.png": "90447dc8cceaef4d122acc701d6da09b9b414eba76dc43b1359df5f8bb1f4613",
+    "reports/episode_outcomes.png": "844bf374c8977d3b949cf0d10c8ed9f91679da5d4152d0997aadb9f1e4c05a82",
+    "reports/episode_sizes.png": "9d34f2e04dbb40579ee695e1f38aa0295a7d11afb3e687e3d3b9b6e9c1f20d30",
+    "reports/replay_error.png": "b4dd640daac2c4a59a4c23612026abaaf28e2bec1672f04d09178dc022354c20",
+    "reports/summary.json": "8b88d1eb7202a3828bc006e47592a6ee2e4be1fb8e139532f974182e47bd9e74",
+    "reports/summary.md": "9ab2f0a2cbcc925e73e62a0497633114c3792e3b36989bf4dd1f25b3602d4f27",
+    "rgb_depth_pair.png": "c4d16f08ea6dc9e4a9dca608eba3687e84e62d5b6b9aae55d80c72e77205a4c4",
+    "runtime_first_person.png": "15099db70f7d43ad0c84c61ca55e84f258a42c0e2f873eccf13f4f240d66b46b",
+    "sample/depth.png": "f5a61cf71d158e4b38640a9e4ed88f6791e1ec9d912aa4506da43894966909c4",
+    "sample/depth_preview.png": "bfa794b8a45aa097c0d0a3a6fe412b6f82d34e9f97c09d58ab0778f9273c4f05",
+    "sample/manifest.json": "a760ac460a87127381b622136b834d2df712d6b46e7639c70ad9a69ed1e07461",
+    "sample/native_replay.replay": "e6c829bcb458cfccbdee00c6230e0d377dd15008323a37bc7d2281cbe120c596",
+    "sample/rgb.png": "15099db70f7d43ad0c84c61ca55e84f258a42c0e2f873eccf13f4f240d66b46b",
+    "sample/trajectory_excerpt.jsonl": "59a92f258d3466d64b326ee4b91f786b893d2d391714747fca8894f40539aefd",
+    "simtrace_demo.mp4": "c9450d7442668f109d8a889421fe72cc15730541d72668c8e9ab94b84fdc64e4"
+  }
+}
