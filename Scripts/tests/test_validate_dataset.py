@@ -7,7 +7,7 @@ from pathlib import Path
 
 from PIL import Image
 
-from Scripts.validate_dataset import compare_episodes, validate_episode
+from Scripts.validate_dataset import build_report, compare_episodes, validate_episode
 
 
 class DatasetFixture:
@@ -84,6 +84,12 @@ class DatasetFixture:
             json.dumps(manifest), encoding="utf-8"
         )
 
+    def update_manifest(self, **fields: object) -> None:
+        manifest_path = self.path / "manifest.json"
+        manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+        manifest.update(fields)
+        manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
+
 
 class ValidateDatasetTest(unittest.TestCase):
     def test_valid_episode_passes(self) -> None:
@@ -113,7 +119,51 @@ class ValidateDatasetTest(unittest.TestCase):
             self.assertEqual(0.0, metrics["final_position_error_cm"])
             self.assertTrue(metrics["within_target"])
 
+    def test_manifest_total_bytes_must_match_disk(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            fixture = DatasetFixture(Path(directory), "episode_wrong_bytes")
+            fixture.update_manifest(total_bytes=0)
+
+            result = validate_episode(fixture.path)
+
+            self.assertIn(
+                "manifest total_bytes does not match files on disk",
+                result["errors"],
+            )
+
+    def test_report_handles_constant_action_magnitude(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            fixture = DatasetFixture(root, "episode_constant")
+            for frame, row in enumerate(fixture.rows):
+                row["move_input"] = [0.0, 1.0 + frame * 1e-16]
+            (fixture.path / "trajectory.jsonl").write_text(
+                "".join(json.dumps(row) + "\n" for row in fixture.rows),
+                encoding="utf-8",
+            )
+
+            summary = build_report(root, root / "reports")
+
+            self.assertEqual(1, summary["episode_count"])
+            self.assertTrue((root / "reports" / "action_distributions.png").is_file())
+            markdown = (root / "reports" / "summary.md").read_text(encoding="utf-8")
+            self.assertIn("## Capture performance", markdown)
+            self.assertIn("## Seed reproducibility", markdown)
+
+    def test_performance_report_uses_only_bot_capture_baseline(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            DatasetFixture(root, "episode_capture_on")
+            capture_off = DatasetFixture(root, "episode_capture_off")
+            capture_off.update_manifest(capture_hz=0)
+            replay = DatasetFixture(root, "episode_replay", mode="input-replay")
+            replay.update_manifest(capture_hz=0)
+
+            summary = build_report(root, root / "reports")
+
+            self.assertEqual(4, summary["performance"]["capture_on_ms"]["count"])
+            self.assertEqual(4, summary["performance"]["capture_off_ms"]["count"])
+
 
 if __name__ == "__main__":
     unittest.main()
-

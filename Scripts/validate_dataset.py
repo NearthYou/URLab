@@ -289,6 +289,11 @@ def validate_episode(episode: Path | str) -> dict[str, Any]:
     result["total_bytes"] = sum(path.stat().st_size for path in files)
     if "file_count" in manifest and manifest["file_count"] != len(files):
         errors.append("manifest file_count does not match files on disk")
+    if (
+        "total_bytes" in manifest
+        and int(manifest["total_bytes"]) != result["total_bytes"]
+    ):
+        errors.append("manifest total_bytes does not match files on disk")
     return result
 
 
@@ -405,6 +410,7 @@ def _write_plots(
 
     plt.figure(figsize=(8, 4.5))
     plotted = False
+    action_bins = np.linspace(0.0, math.sqrt(2.0) + 1e-6, 31)
     for mode in ("human", "bot", "input-replay"):
         values = [
             value
@@ -413,7 +419,7 @@ def _write_plots(
             for value in result["_move_magnitudes"]
         ]
         if values:
-            plt.hist(values, bins=20, alpha=0.45, label=mode)
+            plt.hist(values, bins=action_bins, alpha=0.45, label=mode)
             plotted = True
     if plotted:
         plt.legend()
@@ -455,13 +461,13 @@ def _write_plots(
     capture_on = [
         value
         for result in results
-        if result.get("_capture_hz", 0) > 0
+        if result["mode"] == "bot" and result.get("_capture_hz", 0) > 0
         for value in result["_frame_times_ms"]
     ]
     capture_off = [
         value
         for result in results
-        if result.get("_capture_hz", 0) == 0
+        if result["mode"] == "bot" and result.get("_capture_hz", 0) == 0
         for value in result["_frame_times_ms"]
     ]
     plt.figure(figsize=(7, 4.5))
@@ -476,7 +482,7 @@ def _write_plots(
     if data:
         plt.boxplot(data, tick_labels=labels, showfliers=False)
     plt.ylabel("Frame time ms")
-    plt.title("Capture performance")
+    plt.title("Bot capture performance")
     plt.tight_layout()
     path = output / "capture_performance.png"
     plt.savefig(path, dpi=150)
@@ -565,13 +571,13 @@ def build_report(
     capture_on = [
         value
         for result in results
-        if result["_capture_hz"] > 0
+        if result["mode"] == "bot" and result["_capture_hz"] > 0
         for value in result["_frame_times_ms"]
     ]
     capture_off = [
         value
         for result in results
-        if result["_capture_hz"] == 0
+        if result["mode"] == "bot" and result["_capture_hz"] == 0
         for value in result["_frame_times_ms"]
     ]
     performance = {
@@ -609,6 +615,14 @@ def build_report(
             {key: value for key, value in result.items() if not key.startswith("_")}
         )
 
+    public_comparisons = [
+        {
+            key: value
+            for key, value in comparison.items()
+            if key != "frame_errors_cm"
+        }
+        for comparison in comparisons
+    ]
     summary = {
         "schema_version": 1,
         "episodes_root": str(episodes_root),
@@ -624,7 +638,7 @@ def build_report(
         ),
         "capture_dropped": sum(result["capture_dropped"] for result in results),
         "seed_reproducibility": seed_reproducibility,
-        "replay_comparisons": comparisons,
+        "replay_comparisons": public_comparisons,
         "action_metrics": action_metrics,
         "performance": performance,
         "plots": plot_files,
@@ -664,6 +678,41 @@ def _write_markdown_summary(path: Path, summary: dict[str, Any]) -> None:
     lines.extend(
         [
             "",
+            "## Seed reproducibility",
+            "",
+            "| Seed | Episodes | Course hash match |",
+            "|---:|---:|---|",
+        ]
+    )
+    for seed, result in summary["seed_reproducibility"].items():
+        lines.append(
+            f"| {seed} | {result['episodes']} | "
+            f"{'pass' if result['course_hash_match'] else 'fail'} |"
+        )
+
+    lines.extend(
+        [
+            "",
+            "## Action distributions",
+            "",
+            "| Mode | Samples | Move mean | Move p95 | Look mean | Look p95 | "
+            "Jump rate | Collision rate |",
+            "|---|---:|---:|---:|---:|---:|---:|---:|",
+        ]
+    )
+    for mode, metrics in summary["action_metrics"].items():
+        move = metrics["move_magnitude"]
+        look = metrics["look_magnitude"]
+        lines.append(
+            f"| {mode} | {move['count']} | {move['mean']:.3f} | "
+            f"{move['p95']:.3f} | {look['mean']:.3f} | {look['p95']:.3f} | "
+            f"{metrics['jump_rate'] * 100.0:.2f}% | "
+            f"{metrics['collision_rate'] * 100.0:.2f}% |"
+        )
+
+    lines.extend(
+        [
+            "",
             "## JSON replay comparisons",
             "",
             "| Replay | Frames | Mean cm | P95 cm | Final cm | Target |",
@@ -679,6 +728,40 @@ def _write_markdown_summary(path: Path, summary: dict[str, Any]) -> None:
             f"{comparison['final_position_error_cm']:.3f} | "
             f"{'pass' if comparison['within_target'] else 'fail'} |"
         )
+
+    performance = summary["performance"]
+    capture_off = performance["capture_off_ms"]
+    capture_on = performance["capture_on_ms"]
+    lines.extend(
+        [
+            "",
+            "## Capture performance",
+            "",
+            "| Metric | Capture off | Capture on |",
+            "|---|---:|---:|",
+            f"| Samples | {capture_off['count']} | {capture_on['count']} |",
+            f"| Mean frame time ms | {capture_off['mean']:.3f} | "
+            f"{capture_on['mean']:.3f} |",
+            f"| Median frame time ms | {capture_off['p50']:.3f} | "
+            f"{capture_on['p50']:.3f} |",
+            f"| P95 frame time ms | {capture_off['p95']:.3f} | "
+            f"{capture_on['p95']:.3f} |",
+            "",
+            "Median FPS drop: "
+            + (
+                f"{performance['median_fps_drop_percent']:.3f}%"
+                if performance["median_fps_drop_percent"] is not None
+                else "not available"
+            ),
+            "",
+            "## Plots",
+            "",
+        ]
+    )
+    for plot in summary["plots"]:
+        label = Path(plot).stem.replace("_", " ").title()
+        lines.append(f"![{label}]({plot})")
+        lines.append("")
 
     lines.extend(["", "## Validation issues", ""])
     issue_count = 0
@@ -757,4 +840,3 @@ def main(argv: list[str] | None = None) -> int:
 
 if __name__ == "__main__":
     sys.exit(main())
-
