@@ -66,15 +66,28 @@ class DatasetFixture:
             "course_hash": "abc123",
             "start_position_cm": [100.0, 0.0, 96.0],
             "goal_position_cm": [3100.0, 0.0, 100.0],
+            "engine_version": "5.8.1-test",
+            "git_revision": "0123456789ab",
             "simulation_hz": 30,
             "capture_hz": 10,
+            "capture_interval_sim_frames": 3,
+            "capture_queue_capacity": 8,
             "image_width": 320,
             "image_height": 180,
+            "sensor_type": "scene_depth",
             "depth_encoding": "uint16_linear_cm",
             "depth_max_cm": 2000,
+            "depth_decode_cm": (
+                "value == 0 ? invalid : "
+                "min(value / 65535.0 * 2000.0, 2000.0)"
+            ),
             "trajectory_frames": 4,
             "capture_frames": 2,
             "capture_dropped": 0,
+            "file_count": 7,
+            "total_bytes": 0,
+            "started_utc": "2026-07-30T00:00:00.000Z",
+            "duration_s": 4 / 30,
             "end_reason": "goal",
             "replay_name": replay_name,
             "replay_archive_path": f"replay/{replay_name}.replay",
@@ -83,6 +96,16 @@ class DatasetFixture:
         (self.path / "manifest.json").write_text(
             json.dumps(manifest), encoding="utf-8"
         )
+        for _ in range(4):
+            total_bytes = sum(
+                path.stat().st_size for path in self.path.rglob("*") if path.is_file()
+            )
+            if manifest["total_bytes"] == total_bytes:
+                break
+            manifest["total_bytes"] = total_bytes
+            (self.path / "manifest.json").write_text(
+                json.dumps(manifest), encoding="utf-8"
+            )
 
     def update_manifest(self, **fields: object) -> None:
         manifest_path = self.path / "manifest.json"
@@ -114,10 +137,49 @@ class ValidateDatasetTest(unittest.TestCase):
             root = Path(directory)
             original = DatasetFixture(root, "episode_original")
             replayed = DatasetFixture(root, "episode_replayed", mode="input-replay")
+            replayed.update_manifest(parent_episode_id="episode_original")
             metrics = compare_episodes(original.path, replayed.path)
             self.assertEqual(0.0, metrics["mean_position_error_cm"])
             self.assertEqual(0.0, metrics["final_position_error_cm"])
+            self.assertTrue(metrics["parent_episode_match"])
+            self.assertTrue(metrics["frame_alignment_match"])
             self.assertTrue(metrics["within_target"])
+
+    def test_replay_with_wrong_parent_fails_target(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            original = DatasetFixture(root, "episode_original")
+            replayed = DatasetFixture(root, "episode_replayed", mode="input-replay")
+
+            metrics = compare_episodes(original.path, replayed.path)
+
+            self.assertFalse(metrics["parent_episode_match"])
+            self.assertFalse(metrics["within_target"])
+
+    def test_replay_with_missing_frame_fails_target(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            original = DatasetFixture(root, "episode_original")
+            replayed = DatasetFixture(root, "episode_replayed", mode="input-replay")
+            replayed.update_manifest(parent_episode_id="episode_original")
+            (replayed.path / "trajectory.jsonl").write_text(
+                "".join(json.dumps(row) + "\n" for row in replayed.rows[:-1]),
+                encoding="utf-8",
+            )
+
+            metrics = compare_episodes(original.path, replayed.path)
+
+            self.assertFalse(metrics["frame_alignment_match"])
+            self.assertFalse(metrics["within_target"])
+
+    def test_unavailable_git_revision_is_reported(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            fixture = DatasetFixture(Path(directory), "episode_no_revision")
+            fixture.update_manifest(git_revision="unavailable")
+
+            result = validate_episode(fixture.path)
+
+            self.assertIn("manifest git_revision is unavailable", result["errors"])
 
     def test_manifest_total_bytes_must_match_disk(self) -> None:
         with tempfile.TemporaryDirectory() as directory:

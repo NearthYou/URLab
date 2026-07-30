@@ -49,7 +49,8 @@ def _load_trajectory(path: Path) -> list[dict[str, Any]]:
 
 
 def _png_header(path: Path) -> tuple[int, int, int, int]:
-    header = path.read_bytes()[:26]
+    with path.open("rb") as stream:
+        header = stream.read(26)
     if len(header) < 26 or header[:8] != b"\x89PNG\r\n\x1a\n":
         raise ValueError("not a PNG file")
     return (
@@ -128,6 +129,60 @@ def validate_episode(episode: Path | str) -> dict[str, Any]:
         errors.append("manifest complete flag is false")
     if manifest.get("schema_version") != 1:
         errors.append("unsupported manifest schema_version")
+    required_manifest_fields = {
+        "episode_id",
+        "mode",
+        "seed",
+        "parent_episode_id",
+        "course_hash",
+        "start_position_cm",
+        "goal_position_cm",
+        "engine_version",
+        "git_revision",
+        "simulation_hz",
+        "capture_hz",
+        "capture_interval_sim_frames",
+        "capture_queue_capacity",
+        "image_width",
+        "image_height",
+        "sensor_type",
+        "depth_encoding",
+        "depth_max_cm",
+        "depth_decode_cm",
+        "trajectory_frames",
+        "capture_frames",
+        "capture_dropped",
+        "file_count",
+        "total_bytes",
+        "started_utc",
+        "duration_s",
+        "end_reason",
+        "replay_name",
+        "replay_archive_path",
+        "complete",
+    }
+    for field in sorted(required_manifest_fields - manifest.keys()):
+        errors.append(f"manifest field is missing: {field}")
+    if manifest.get("episode_id") != episode.name:
+        errors.append("manifest episode_id does not match directory name")
+    if manifest.get("git_revision") in {None, "", "unavailable"}:
+        errors.append("manifest git_revision is unavailable")
+    if manifest.get("simulation_hz") != 30:
+        errors.append("manifest simulation_hz must be 30")
+    if manifest.get("capture_hz") not in {0, 10}:
+        errors.append("manifest capture_hz must be 0 or 10")
+    if manifest.get("capture_interval_sim_frames") != 3:
+        errors.append("manifest capture_interval_sim_frames must be 3")
+    if manifest.get("capture_queue_capacity") != 8:
+        errors.append("manifest capture_queue_capacity must be 8")
+    if (manifest.get("image_width"), manifest.get("image_height")) != (320, 180):
+        errors.append("manifest image dimensions must be 320x180")
+    if manifest.get("sensor_type") != "scene_depth":
+        errors.append("manifest sensor_type must be scene_depth")
+    if manifest.get("depth_encoding") != "uint16_linear_cm":
+        errors.append("manifest depth_encoding must be uint16_linear_cm")
+    if manifest.get("depth_max_cm") != 2000:
+        errors.append("manifest depth_max_cm must be 2000")
 
     trajectory_path = episode / "trajectory.jsonl"
     if not trajectory_path.exists():
@@ -332,12 +387,26 @@ def compare_episodes(
     maximum_error = float(np.max(errors))
     final_error = float(errors[-1])
     seed_match = original_manifest.get("seed") == replayed_manifest.get("seed")
+    original_episode_id = original_manifest.get("episode_id", original_episode.name)
+    replayed_episode_id = replayed_manifest.get("episode_id", replayed_episode.name)
+    parent_episode_match = (
+        replayed_manifest.get("parent_episode_id") == original_episode_id
+    )
+    frame_alignment_match = (
+        len(original_by_frame) == len(original_rows)
+        and len(replayed_by_frame) == len(replayed_rows)
+        and set(original_by_frame) == set(range(len(original_rows)))
+        and set(replayed_by_frame) == set(range(len(replayed_rows)))
+        and original_by_frame.keys() == replayed_by_frame.keys()
+    )
     course_hash_match = (
         original_manifest.get("course_hash")
         == replayed_manifest.get("course_hash")
     )
     within_target = (
         seed_match
+        and parent_episode_match
+        and frame_alignment_match
         and course_hash_match
         and start_error <= POSITION_TARGETS_CM["start"]
         and mean_error <= POSITION_TARGETS_CM["mean"]
@@ -345,14 +414,13 @@ def compare_episodes(
         and final_error <= POSITION_TARGETS_CM["final"]
     )
     return {
-        "original_episode_id": original_manifest.get(
-            "episode_id", original_episode.name
-        ),
-        "replayed_episode_id": replayed_manifest.get(
-            "episode_id", replayed_episode.name
-        ),
+        "original_episode_id": original_episode_id,
+        "replayed_episode_id": replayed_episode_id,
+        "seed": original_manifest.get("seed"),
         "shared_frames": len(shared_frames),
         "seed_match": seed_match,
+        "parent_episode_match": parent_episode_match,
+        "frame_alignment_match": frame_alignment_match,
         "course_hash_match": course_hash_match,
         "start_position_error_cm": start_error,
         "mean_position_error_cm": mean_error,
@@ -377,18 +445,39 @@ def _distribution(values: list[float]) -> dict[str, float | int]:
     }
 
 
+def _bot_frame_times_by_capture(
+    results: list[dict[str, Any]],
+) -> tuple[list[float], list[float]]:
+    capture_on = [
+        value
+        for result in results
+        if result["mode"] == "bot" and result.get("_capture_hz", 0) > 0
+        for value in result["_frame_times_ms"]
+    ]
+    capture_off = [
+        value
+        for result in results
+        if result["mode"] == "bot" and result.get("_capture_hz", 0) == 0
+        for value in result["_frame_times_ms"]
+    ]
+    return capture_on, capture_off
+
+
 def _write_plots(
     output: Path,
     results: list[dict[str, Any]],
     comparisons: list[dict[str, Any]],
 ) -> list[str]:
     plot_paths: list[str] = []
-    episode_labels = [result["episode_id"] for result in results]
+    episode_labels = [
+        f"{index:02d} {result['mode']} s{result['seed']}"
+        for index, result in enumerate(results, start=1)
+    ]
     sizes_mb = [result["total_bytes"] / (1024 * 1024) for result in results]
 
     plt.figure(figsize=(max(8, len(results) * 0.4), 4.5))
     plt.bar(range(len(results)), sizes_mb, color="#277da1")
-    plt.xticks(range(len(results)), episode_labels, rotation=75, ha="right", fontsize=7)
+    plt.xticks(range(len(results)), episode_labels, rotation=55, ha="right", fontsize=7)
     plt.ylabel("MiB")
     plt.title("Episode sizes")
     plt.tight_layout()
@@ -419,12 +508,19 @@ def _write_plots(
             for value in result["_move_magnitudes"]
         ]
         if values:
-            plt.hist(values, bins=action_bins, alpha=0.45, label=mode)
+            weights = np.full(len(values), 100.0 / len(values))
+            plt.hist(
+                values,
+                bins=action_bins,
+                weights=weights,
+                alpha=0.45,
+                label=mode,
+            )
             plotted = True
     if plotted:
         plt.legend()
     plt.xlabel("Move input magnitude")
-    plt.ylabel("Samples")
+    plt.ylabel("Samples percent")
     plt.title("Action distributions")
     plt.tight_layout()
     path = output / "action_distributions.png"
@@ -434,7 +530,7 @@ def _write_plots(
 
     plt.figure(figsize=(8, 4.5))
     if comparisons:
-        labels = [item["replayed_episode_id"] for item in comparisons]
+        labels = [f"seed {item['seed']}" for item in comparisons]
         x = np.arange(len(labels))
         plt.bar(
             x - 0.2,
@@ -458,18 +554,7 @@ def _write_plots(
     plt.close()
     plot_paths.append(path.name)
 
-    capture_on = [
-        value
-        for result in results
-        if result["mode"] == "bot" and result.get("_capture_hz", 0) > 0
-        for value in result["_frame_times_ms"]
-    ]
-    capture_off = [
-        value
-        for result in results
-        if result["mode"] == "bot" and result.get("_capture_hz", 0) == 0
-        for value in result["_frame_times_ms"]
-    ]
+    capture_on, capture_off = _bot_frame_times_by_capture(results)
     plt.figure(figsize=(7, 4.5))
     data: list[list[float]] = []
     labels: list[str] = []
@@ -568,18 +653,7 @@ def build_report(
             else 0.0,
         }
 
-    capture_on = [
-        value
-        for result in results
-        if result["mode"] == "bot" and result["_capture_hz"] > 0
-        for value in result["_frame_times_ms"]
-    ]
-    capture_off = [
-        value
-        for result in results
-        if result["mode"] == "bot" and result["_capture_hz"] == 0
-        for value in result["_frame_times_ms"]
-    ]
+    capture_on, capture_off = _bot_frame_times_by_capture(results)
     performance = {
         "capture_on_ms": _distribution(capture_on),
         "capture_off_ms": _distribution(capture_off),
