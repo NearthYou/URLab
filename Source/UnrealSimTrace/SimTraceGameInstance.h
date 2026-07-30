@@ -13,6 +13,7 @@ class UNREALSIMTRACE_API USimTraceGameInstance : public UGameInstance
 public:
 	virtual void Init() override;
 	virtual void OnStart() override;
+	virtual void Shutdown() override;
 
 	const FSimTraceRuntimeConfig& GetRuntimeConfig() const { return RuntimeConfig; }
 	void StartEpisodeReplay(const FString& ReplayName);
@@ -22,5 +23,7 @@ public:
 
 private:
 	FSimTraceRuntimeConfig RuntimeConfig;
-};
+	FDelegateHandle ReplayCompleteHandle;
 
+	void HandleReplayPlaybackComplete(UWorld* ReplayWorld);
+};

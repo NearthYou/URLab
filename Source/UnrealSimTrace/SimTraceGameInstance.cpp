@@ -1,14 +1,19 @@
 #include "SimTraceGameInstance.h"
 
 #include "HAL/FileManager.h"
+#include "HAL/PlatformMisc.h"
 #include "Misc/CommandLine.h"
 #include "Misc/Paths.h"
+#include "Net/UnrealNetwork.h"
 #include "UnrealSimTrace.h"
 
 void USimTraceGameInstance::Init()
 {
 	Super::Init();
 	RuntimeConfig = FSimTraceRuntimeConfig::Parse(FCommandLine::Get());
+	ReplayCompleteHandle = FNetworkReplayDelegates::OnReplayPlaybackComplete.AddUObject(
+		this,
+		&USimTraceGameInstance::HandleReplayPlaybackComplete);
 	UE_LOG(
 		LogSimTrace,
 		Display,
@@ -17,6 +22,12 @@ void USimTraceGameInstance::Init()
 		RuntimeConfig.Seed,
 		RuntimeConfig.BatchCount,
 		RuntimeConfig.bCapture ? TEXT("true") : TEXT("false"));
+}
+
+void USimTraceGameInstance::Shutdown()
+{
+	FNetworkReplayDelegates::OnReplayPlaybackComplete.Remove(ReplayCompleteHandle);
+	Super::Shutdown();
 }
 
 void USimTraceGameInstance::OnStart()
@@ -84,3 +95,10 @@ bool USimTraceGameInstance::RestoreReplayArchive(const FString& ReplayName) cons
 	return IFileManager::Get().Copy(*DemoPath, *Matches[0], true, true) == COPY_OK;
 }
 
+void USimTraceGameInstance::HandleReplayPlaybackComplete(UWorld* ReplayWorld)
+{
+	if (RuntimeConfig.Mode == ESimTraceMode::NativeReplay)
+	{
+		FPlatformMisc::RequestExit(false);
+	}
+}
