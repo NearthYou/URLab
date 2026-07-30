@@ -10,6 +10,7 @@
 #include "Serialization/JsonReader.h"
 #include "Serialization/JsonSerializer.h"
 #include "SimTraceCharacter.h"
+#include "SimTraceCaptureComponent.h"
 #include "SimTraceCourseActor.h"
 #include "SimTraceGameInstance.h"
 #include "SimTracePlayerController.h"
@@ -84,8 +85,40 @@ void ASimTraceGameMode::Tick(const float DeltaSeconds)
 		EndReason = ESimTraceEndReason::Timeout;
 	}
 
-	const bool bDone = EndReason != ESimTraceEndReason::None;
-	if (!Recorder->RecordFrame(bDone, EndReason, DeltaSeconds * 1000.0))
+	FSimTraceCaptureResult CaptureResult;
+	const int32 SimFrame = Recorder->GetNextFrameIndex();
+	if (Config.bCapture && !bCaptureReady)
+	{
+		EndReason = ESimTraceEndReason::CaptureError;
+	}
+	else if (Config.bCapture && SimFrame % 3 == 0)
+	{
+		CaptureResult = SimTraceCharacter->GetCaptureComponent()->CaptureFrame(
+			SimFrame,
+			Recorder->GetEpisodeDirectory());
+		if (CaptureResult.bError)
+		{
+			EndReason = ESimTraceEndReason::CaptureError;
+		}
+	}
+
+	bool bDone = EndReason != ESimTraceEndReason::None;
+	if (bDone &&
+		Config.bCapture &&
+		!SimTraceCharacter->GetCaptureComponent()->FlushPendingWrites())
+	{
+		EndReason = ESimTraceEndReason::CaptureError;
+		bDone = true;
+	}
+
+	if (!Recorder->RecordFrame(
+			bDone,
+			EndReason,
+			DeltaSeconds * 1000.0,
+			CaptureResult.bCaptured,
+			CaptureResult.bDropped,
+			CaptureResult.RgbRelativePath,
+			CaptureResult.DepthRelativePath))
 	{
 		EndReason = ESimTraceEndReason::IoError;
 		FinishEpisode(EndReason);
@@ -174,6 +207,8 @@ void ASimTraceGameMode::StartEpisode()
 	}
 
 	SimTraceCharacter->ResetForEpisode(Course->GetLayout().StartTransform);
+	bCaptureReady = !Config.bCapture ||
+		SimTraceCharacter->GetCaptureComponent()->InitializeCapture();
 	BotWaypointIndex = 0;
 	bManualAbortRequested = false;
 	if (!Recorder->BeginEpisode(
@@ -212,6 +247,10 @@ void ASimTraceGameMode::FinishEpisode(const ESimTraceEndReason EndReason)
 		return;
 	}
 	bEpisodeActive = false;
+	if (SimTraceCharacter && SimTraceCharacter->GetCaptureComponent())
+	{
+		SimTraceCharacter->GetCaptureComponent()->FlushPendingWrites();
+	}
 
 	USimTraceGameInstance* GameInstance = GetGameInstance<USimTraceGameInstance>();
 	if (GameInstance)

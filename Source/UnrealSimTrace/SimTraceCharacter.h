@@ -9,6 +9,7 @@ class UCameraComponent;
 class UInputAction;
 class UInputMappingContext;
 class UPrimitiveComponent;
+class USimTraceCaptureComponent;
 struct FInputActionValue;
 
 UCLASS()
@@ -36,6 +37,7 @@ public:
 
 	const FSimTraceActionState& GetCurrentAction() const { return CurrentAction; }
 	UCameraComponent* GetFirstPersonCamera() const { return FirstPersonCamera; }
+	USimTraceCaptureComponent* GetCaptureComponent() const { return CaptureComponent; }
 	UInputAction* GetMoveAction() const { return MoveAction; }
 	UInputAction* GetLookAction() const { return LookAction; }
 	UInputAction* GetJumpAction() const { return JumpAction; }
@@ -43,6 +45,9 @@ public:
 private:
 	UPROPERTY()
 	TObjectPtr<UCameraComponent> FirstPersonCamera;
+
+	UPROPERTY()
+	TObjectPtr<USimTraceCaptureComponent> CaptureComponent;
 
 	UPROPERTY()
 	TObjectPtr<UInputAction> MoveAction;
@@ -68,4 +73,3 @@ private:
 	void JumpCompleted(const FInputActionValue& Value);
 	void ManualAbortInput(const FInputActionValue& Value);
 };
-

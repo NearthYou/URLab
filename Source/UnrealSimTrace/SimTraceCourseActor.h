@@ -6,6 +6,9 @@
 #include "SimTraceCourseActor.generated.h"
 
 class UBoxComponent;
+class UDirectionalLightComponent;
+class UPointLightComponent;
+class USkyAtmosphereComponent;
 class UStaticMesh;
 class UStaticMeshComponent;
 class UPrimitiveComponent;
@@ -39,6 +42,21 @@ private:
 	TObjectPtr<UBoxComponent> GoalTrigger;
 
 	UPROPERTY()
+	TObjectPtr<UDirectionalLightComponent> SunLight;
+
+	UPROPERTY()
+	TObjectPtr<USkyAtmosphereComponent> SkyAtmosphere;
+
+	UPROPERTY()
+	TObjectPtr<UPointLightComponent> FillLightNear;
+
+	UPROPERTY()
+	TObjectPtr<UPointLightComponent> FillLightMiddle;
+
+	UPROPERTY()
+	TObjectPtr<UPointLightComponent> FillLightFar;
+
+	UPROPERTY()
 	TObjectPtr<UStaticMesh> CubeMesh;
 
 	UPROPERTY()
@@ -69,4 +87,3 @@ private:
 	void AddGate();
 	void AddGoalVisuals();
 };
-

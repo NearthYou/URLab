@@ -14,6 +14,7 @@
 #include "InputModifiers.h"
 #include "SimTraceGameInstance.h"
 #include "SimTraceGameMode.h"
+#include "SimTraceCaptureComponent.h"
 
 ASimTraceCharacter::ASimTraceCharacter()
 {
@@ -26,6 +27,9 @@ ASimTraceCharacter::ASimTraceCharacter()
 	FirstPersonCamera->SetRelativeLocation(FVector(0.0, 0.0, 64.0));
 	FirstPersonCamera->bUsePawnControlRotation = true;
 	FirstPersonCamera->FieldOfView = 90.0;
+
+	CaptureComponent = CreateDefaultSubobject<USimTraceCaptureComponent>(TEXT("SimTraceCapture"));
+	CaptureComponent->SetupAttachment(FirstPersonCamera);
 
 	GetMesh()->SetHiddenInGame(true);
 	GetMesh()->SetCollisionEnabled(ECollisionEnabled::NoCollision);

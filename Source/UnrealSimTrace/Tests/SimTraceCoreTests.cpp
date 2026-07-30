@@ -1,6 +1,7 @@
 #if WITH_DEV_AUTOMATION_TESTS
 
 #include "Misc/AutomationTest.h"
+#include "SimTraceCaptureComponent.h"
 #include "SimTraceCourseLayout.h"
 #include "SimTraceRuntimeConfig.h"
 #include "SimTraceTypes.h"
@@ -76,6 +77,20 @@ bool FSimTraceRuntimeConfigTest::RunTest(const FString& Parameters)
 		TEXT("-SimTraceBatchCount=0 -SimTraceMaxSeconds=-1"));
 	TestEqual(TEXT("Batch count is clamped"), SafeDefaults.BatchCount, 1);
 	TestEqual(TEXT("Timeout is clamped"), SafeDefaults.MaxSeconds, 1.0);
+	return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+	FSimTraceDepthEncodingTest,
+	"SimTrace.Core.DepthEncoding",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FSimTraceDepthEncodingTest::RunTest(const FString& Parameters)
+{
+	TestEqual(TEXT("Invalid depth is zero"), FSimTraceDepthEncoding::EncodeCentimeters(0.0f), uint16(0));
+	TestEqual(TEXT("Half range maps to midpoint"), FSimTraceDepthEncoding::EncodeCentimeters(1000.0f), uint16(32768));
+	TestEqual(TEXT("Maximum depth saturates"), FSimTraceDepthEncoding::EncodeCentimeters(2000.0f), uint16(65535));
+	TestEqual(TEXT("Beyond maximum saturates"), FSimTraceDepthEncoding::EncodeCentimeters(5000.0f), uint16(65535));
 	return true;
 }
 

@@ -1,6 +1,9 @@
 #include "SimTraceCourseActor.h"
 
 #include "Components/BoxComponent.h"
+#include "Components/DirectionalLightComponent.h"
+#include "Components/PointLightComponent.h"
+#include "Components/SkyAtmosphereComponent.h"
 #include "Components/StaticMeshComponent.h"
 #include "Engine/StaticMesh.h"
 #include "GameFramework/Character.h"
@@ -23,6 +26,33 @@ ASimTraceCourseActor::ASimTraceCourseActor()
 	GoalTrigger->SetCollisionResponseToAllChannels(ECR_Ignore);
 	GoalTrigger->SetCollisionResponseToChannel(ECC_Pawn, ECR_Overlap);
 	GoalTrigger->OnComponentBeginOverlap.AddDynamic(this, &ASimTraceCourseActor::OnGoalBeginOverlap);
+
+	SkyAtmosphere = CreateDefaultSubobject<USkyAtmosphereComponent>(TEXT("SkyAtmosphere"));
+	SkyAtmosphere->SetupAttachment(SceneRoot);
+
+	SunLight = CreateDefaultSubobject<UDirectionalLightComponent>(TEXT("SunLight"));
+	SunLight->SetupAttachment(SceneRoot);
+	SunLight->SetRelativeRotation(FRotator(-45.0, -35.0, 0.0));
+	SunLight->SetIntensity(8.0f);
+	SunLight->SetAtmosphereSunLight(true);
+
+	FillLightNear = CreateDefaultSubobject<UPointLightComponent>(TEXT("FillLightNear"));
+	FillLightNear->SetupAttachment(SceneRoot);
+	FillLightNear->SetRelativeLocation(FVector(600.0, 0.0, 650.0));
+	FillLightNear->SetIntensity(20000.0f);
+	FillLightNear->SetAttenuationRadius(1800.0f);
+
+	FillLightMiddle = CreateDefaultSubobject<UPointLightComponent>(TEXT("FillLightMiddle"));
+	FillLightMiddle->SetupAttachment(SceneRoot);
+	FillLightMiddle->SetRelativeLocation(FVector(1600.0, 0.0, 650.0));
+	FillLightMiddle->SetIntensity(20000.0f);
+	FillLightMiddle->SetAttenuationRadius(1800.0f);
+
+	FillLightFar = CreateDefaultSubobject<UPointLightComponent>(TEXT("FillLightFar"));
+	FillLightFar->SetupAttachment(SceneRoot);
+	FillLightFar->SetRelativeLocation(FVector(2700.0, 0.0, 650.0));
+	FillLightFar->SetIntensity(20000.0f);
+	FillLightFar->SetAttenuationRadius(1800.0f);
 
 	static ConstructorHelpers::FObjectFinder<UStaticMesh> CubeFinder(TEXT("/Engine/BasicShapes/Cube.Cube"));
 	CubeMesh = CubeFinder.Object;
@@ -161,4 +191,3 @@ void ASimTraceCourseActor::AddGoalVisuals()
 		FVector(40.0, 640.0, 40.0),
 		false);
 }
-

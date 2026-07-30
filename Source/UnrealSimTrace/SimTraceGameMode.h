@@ -39,6 +39,7 @@ private:
 	mutable int32 BotWaypointIndex = 0;
 	bool bEpisodeActive = false;
 	bool bManualAbortRequested = false;
+	bool bCaptureReady = false;
 	FTimerHandle EpisodeTimer;
 
 	void StartEpisode();
@@ -47,4 +48,3 @@ private:
 	bool LoadReplayInput(int32& OutSeed);
 	FSimTraceActionState BuildBotAction() const;
 };
-
