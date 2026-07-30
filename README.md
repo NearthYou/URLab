@@ -396,16 +396,6 @@ Unreal Automation Tests를 실행한다.
 publish 명령을 다시 실행한 뒤 별도로 촬영한다. 현재 저장된 MP4는
 재현 가능한 자동 증거 영상이며 사람 조작 영상으로 표시하지 않는다.
 
-## 알려진 한계
-
-- Unreal native Replay는 같은 Unreal 5.8.1 환경에서 재생하는 것을 기준으로 한다.
-- 수치 재현성 평가는 JSON 입력 재생이 담당한다. Native Replay는 엔진 수준의 시각 재생 증명이다.
-- 캡처 readback은 게임 스레드에서 실행되며 PNG 압축과 저장만 thread pool에서 수행한다.
-- fixed timestep과 운영체제 scheduling 때문에 실제 frame time은 정확히 33.333 ms로 고정되지 않는다.
-- 현재 코스와 캐릭터는 하나이며 ROS2, Isaac Sim, PPO, LLM NPC, 전투는 범위 밖이다.
-- 공개 증거 번들에는 Human 10회 데이터가 없다. 실제 조작자가 생성해야 한다.
-- 저장된 60초 MP4는 실제 센서 프레임과 보고서로 만든 자동 증거 영상이며 라이브 화면 녹화가 아니다.
-
 ## 공식 API 기준
 
 - [Enhanced Input](https://dev.epicgames.com/documentation/unreal-engine/enhanced-input-in-unreal-engine)
