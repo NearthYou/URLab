@@ -40,6 +40,19 @@ struct UNREALSIMTRACE_API FSimTraceActionState
 	FVector2D Move = FVector2D::ZeroVector;
 	FVector2D Look = FVector2D::ZeroVector;
 	bool bJumpPressed = false;
+	bool bFirePressed = false;
+};
+
+struct UNREALSIMTRACE_API FSimTraceShotOutcome
+{
+	bool bShotFired = false;
+	int32 ShotId = INDEX_NONE;
+	FVector Origin = FVector::ZeroVector;
+	FVector Direction = FVector::ForwardVector;
+	bool bHit = false;
+	FString TargetId;
+	FVector ImpactPosition = FVector::ZeroVector;
+	double DistanceCentimeters = 0.0;
 };
 
 struct UNREALSIMTRACE_API FSimTraceTrajectorySample
@@ -54,6 +67,8 @@ struct UNREALSIMTRACE_API FSimTraceTrajectorySample
 	FVector2D MoveInput = FVector2D::ZeroVector;
 	FVector2D LookInput = FVector2D::ZeroVector;
 	bool bJumpPressed = false;
+	bool bFirePressed = false;
+	FSimTraceShotOutcome ShotOutcome;
 	bool bCollision = false;
 	bool bCaptured = false;
 	bool bCaptureDropped = false;

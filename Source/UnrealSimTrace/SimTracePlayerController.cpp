@@ -42,6 +42,9 @@ void ASimTracePlayerController::ProcessPlayerInput(const float DeltaTime, const 
 					EnhancedInput->InjectInputForAction(
 						SimCharacter->GetJumpAction(),
 						FInputActionValue(Action.bJumpPressed));
+					EnhancedInput->InjectInputForAction(
+						SimCharacter->GetFireAction(),
+						FInputActionValue(Action.bFirePressed));
 				}
 			}
 		}

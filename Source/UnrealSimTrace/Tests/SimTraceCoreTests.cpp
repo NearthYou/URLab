@@ -9,6 +9,8 @@
 #include "SimTraceCaptureComponent.h"
 #include "SimTraceCharacter.h"
 #include "SimTraceCourseLayout.h"
+#include "SimTraceGameMode.h"
+#include "SimTraceHUD.h"
 #include "SimTraceRuntimeConfig.h"
 #include "SimTraceTypes.h"
 #include "Serialization/JsonReader.h"
@@ -30,7 +32,14 @@ bool FSimTraceCourseDeterminismTest::RunTest(const FString& Parameters)
 	TestEqual(TEXT("Same seed has the same start"), First.StartTransform.ToString(), Second.StartTransform.ToString());
 	TestEqual(TEXT("Same seed has the same goal"), First.GoalTransform.ToString(), Second.GoalTransform.ToString());
 	TestNotEqual(TEXT("Different seeds vary the course"), First.CourseHash, Different.CourseHash);
-	TestEqual(TEXT("Course has three slalom obstacles, a jump and a gate"), First.Elements.Num(), 8);
+	TestEqual(
+		TEXT("Course includes target and range dressing"),
+		First.Elements.Num(),
+		13);
+	TestEqual(
+		TEXT("Target transform is stable for the same seed"),
+		First.TargetTransform.ToString(),
+		Second.TargetTransform.ToString());
 	TestTrue(TEXT("Bot path ends inside the goal"), First.Waypoints.Last().X >= 3000.0);
 	return true;
 }
@@ -47,6 +56,15 @@ bool FSimTraceTrajectorySerializationTest::RunTest(const FString& Parameters)
 	Sample.TimestampSeconds = FSimTraceTrajectorySample::TimestampForFrame(42);
 	Sample.Position = FVector(120.0, 35.0, 90.0);
 	Sample.MoveInput = FVector2D(1.0, 0.0);
+	Sample.bFirePressed = true;
+	Sample.ShotOutcome.bShotFired = true;
+	Sample.ShotOutcome.ShotId = 7;
+	Sample.ShotOutcome.Origin = FVector(120.0, 35.0, 154.0);
+	Sample.ShotOutcome.Direction = FVector(1.0, 0.0, 0.0);
+	Sample.ShotOutcome.bHit = true;
+	Sample.ShotOutcome.TargetId = TEXT("target_alpha");
+	Sample.ShotOutcome.ImpactPosition = FVector(2950.0, 35.0, 154.0);
+	Sample.ShotOutcome.DistanceCentimeters = 2830.0;
 	Sample.bDone = true;
 	Sample.EndReason = ESimTraceEndReason::Goal;
 
@@ -60,6 +78,42 @@ bool FSimTraceTrajectorySerializationTest::RunTest(const FString& Parameters)
 		Parsed.IsValid() && FMath::IsNearlyEqual(Parsed->GetNumberField(TEXT("timestamp_s")), 1.4, 0.000001));
 	TestTrue(TEXT("Done state is serialized"), JsonLine.Contains(TEXT("\"done\":true")));
 	TestTrue(TEXT("End reason is serialized"), JsonLine.Contains(TEXT("\"end_reason\":\"goal\"")));
+	const TArray<TSharedPtr<FJsonValue>>* CombatEvents = nullptr;
+	TestTrue(
+		TEXT("Combat event ledger is serialized"),
+		Parsed.IsValid() &&
+			Parsed->TryGetArrayField(TEXT("combat_events"), CombatEvents) &&
+			CombatEvents &&
+			CombatEvents->Num() == 3);
+	if (CombatEvents && CombatEvents->Num() == 3)
+	{
+		TestEqual(
+			TEXT("Ledger begins with fire"),
+			(*CombatEvents)[0]->AsObject()->GetStringField(TEXT("event")),
+			FString(TEXT("fire")));
+		TestEqual(
+			TEXT("Ledger records the shot second"),
+			(*CombatEvents)[1]->AsObject()->GetStringField(TEXT("event")),
+			FString(TEXT("shot")));
+		TestEqual(
+			TEXT("Ledger records the hit outcome last"),
+			(*CombatEvents)[2]->AsObject()->GetStringField(TEXT("event")),
+			FString(TEXT("hit")));
+	}
+	return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+	FSimTraceRuntimePresentationTest,
+	"SimTrace.Core.RuntimePresentation",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FSimTraceRuntimePresentationTest::RunTest(const FString& Parameters)
+{
+	const ASimTraceGameMode* GameMode = GetDefault<ASimTraceGameMode>();
+	TestTrue(
+		TEXT("Game mode uses the runtime range HUD"),
+		GameMode->HUDClass == ASimTraceHUD::StaticClass());
 	return true;
 }
 
@@ -139,6 +193,15 @@ bool FSimTraceHumanLookMappingTest::RunTest(const FString& Parameters)
 	}
 
 	TestNotNull(TEXT("Mouse look negates only the vertical axis"), VerticalNegate);
+
+	const FEnhancedActionKeyMapping* FireMapping =
+		MappingContext->GetMappings().FindByPredicate(
+			[Character](const FEnhancedActionKeyMapping& Mapping)
+			{
+				return Mapping.Action == Character->GetFireAction() &&
+					Mapping.Key == EKeys::LeftMouseButton;
+			});
+	TestNotNull(TEXT("Left mouse button is mapped to fire"), FireMapping);
 	return true;
 }
 

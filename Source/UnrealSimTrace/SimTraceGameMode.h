@@ -22,6 +22,8 @@ public:
 
 	FSimTraceActionState GetSyntheticAction() const;
 	void RequestManualAbort();
+	int32 GetCurrentSeed() const;
+	int32 GetCurrentSimFrame() const;
 
 private:
 	UPROPERTY()
@@ -38,6 +40,7 @@ private:
 	int32 ReplaySeed = 0;
 	int32 EpisodeIndex = 0;
 	mutable int32 BotWaypointIndex = 0;
+	mutable bool bBotShotFired = false;
 	int32 WarmupFramesRemaining = 0;
 	bool bEpisodePreparing = false;
 	bool bEpisodeActive = false;

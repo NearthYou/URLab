@@ -161,6 +161,7 @@ class PublishEvidenceTests(unittest.TestCase):
                 "episode_sizes.png",
                 "episode_outcomes.png",
                 "action_distributions.png",
+                "combat_ledger.png",
                 "replay_error.png",
                 "capture_performance.png",
             ],

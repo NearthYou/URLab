@@ -7,7 +7,11 @@
 
 class UBoxComponent;
 class UDirectionalLightComponent;
+class UExponentialHeightFogComponent;
+class UMaterialInstanceDynamic;
+class UMaterialInterface;
 class UPointLightComponent;
+class USkyLightComponent;
 class USkyAtmosphereComponent;
 class UStaticMesh;
 class UStaticMeshComponent;
@@ -26,6 +30,7 @@ public:
 
 	const FSimTraceCourseLayout& GetLayout() const { return Layout; }
 	FVector GetGoalLocation() const { return Layout.GoalTransform.GetLocation(); }
+	FVector GetRangeTargetLocation() const { return Layout.TargetTransform.GetLocation(); }
 	bool WasGoalReached() const { return bGoalReached; }
 
 protected:
@@ -58,10 +63,22 @@ private:
 	TObjectPtr<UPointLightComponent> FillLightFar;
 
 	UPROPERTY()
+	TObjectPtr<USkyLightComponent> SkyLight;
+
+	UPROPERTY()
+	TObjectPtr<UExponentialHeightFogComponent> HeightFog;
+
+	UPROPERTY()
 	TObjectPtr<UStaticMesh> CubeMesh;
 
 	UPROPERTY()
+	TObjectPtr<UMaterialInterface> BaseShapeMaterial;
+
+	UPROPERTY()
 	TMap<FName, TObjectPtr<UStaticMeshComponent>> RuntimeMeshes;
+
+	UPROPERTY()
+	TMap<FName, TObjectPtr<UMaterialInstanceDynamic>> RuntimeMaterials;
 
 	FSimTraceCourseLayout Layout;
 	bool bGoalReached = false;
@@ -86,4 +103,7 @@ private:
 		bool bCollisionEnabled = true);
 	void AddGate();
 	void AddGoalVisuals();
+	void AddRangeTarget(const FSimTraceCourseElement& Element);
+	void ApplyPalette(FName Name, UStaticMeshComponent* Mesh);
+	FLinearColor ColorForElement(FName Name) const;
 };

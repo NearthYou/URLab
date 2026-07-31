@@ -5,6 +5,7 @@
 #include "EnhancedActionKeyMapping.h"
 #include "EnhancedInputComponent.h"
 #include "EnhancedInputSubsystems.h"
+#include "Engine/World.h"
 #include "Engine/LocalPlayer.h"
 #include "GameFramework/CharacterMovementComponent.h"
 #include "InputAction.h"
@@ -47,6 +48,8 @@ ASimTraceCharacter::ASimTraceCharacter()
 	LookAction->ValueType = EInputActionValueType::Axis2D;
 	JumpAction = CreateDefaultSubobject<UInputAction>(TEXT("IA_Jump"));
 	JumpAction->ValueType = EInputActionValueType::Boolean;
+	FireAction = CreateDefaultSubobject<UInputAction>(TEXT("IA_Fire"));
+	FireAction->ValueType = EInputActionValueType::Boolean;
 	ResetAction = CreateDefaultSubobject<UInputAction>(TEXT("IA_Reset"));
 	ResetAction->ValueType = EInputActionValueType::Boolean;
 	ExitAction = CreateDefaultSubobject<UInputAction>(TEXT("IA_Exit"));
@@ -80,6 +83,7 @@ ASimTraceCharacter::ASimTraceCharacter()
 	FEnhancedActionKeyMapping& Look = MappingContext->MapKey(LookAction, EKeys::Mouse2D);
 	Look.Modifiers.Add(MouseYNegate);
 	MappingContext->MapKey(JumpAction, EKeys::SpaceBar);
+	MappingContext->MapKey(FireAction, EKeys::LeftMouseButton);
 	MappingContext->MapKey(ResetAction, EKeys::R);
 	MappingContext->MapKey(ExitAction, EKeys::Escape);
 }
@@ -98,6 +102,7 @@ void ASimTraceCharacter::SetupPlayerInputComponent(UInputComponent* PlayerInputC
 	EnhancedInput->BindAction(LookAction, ETriggerEvent::Triggered, this, &ASimTraceCharacter::LookInput);
 	EnhancedInput->BindAction(JumpAction, ETriggerEvent::Triggered, this, &ASimTraceCharacter::JumpInput);
 	EnhancedInput->BindAction(JumpAction, ETriggerEvent::Completed, this, &ASimTraceCharacter::JumpCompleted);
+	EnhancedInput->BindAction(FireAction, ETriggerEvent::Started, this, &ASimTraceCharacter::FireInput);
 	EnhancedInput->BindAction(ResetAction, ETriggerEvent::Started, this, &ASimTraceCharacter::ManualAbortInput);
 	EnhancedInput->BindAction(ExitAction, ETriggerEvent::Started, this, &ASimTraceCharacter::ExitInput);
 
@@ -143,6 +148,7 @@ void ASimTraceCharacter::NotifyHit(
 void ASimTraceCharacter::BeginInputFrame()
 {
 	CurrentAction = FSimTraceActionState();
+	CurrentShotOutcome = FSimTraceShotOutcome();
 }
 
 void ASimTraceCharacter::ResetForEpisode(const FTransform& StartTransform)
@@ -155,6 +161,11 @@ void ASimTraceCharacter::ResetForEpisode(const FTransform& StartTransform)
 		Controller->SetControlRotation(StartTransform.Rotator());
 	}
 	CurrentAction = FSimTraceActionState();
+	CurrentShotOutcome = FSimTraceShotOutcome();
+	LastShotOutcome = FSimTraceShotOutcome();
+	ShotsFired = 0;
+	HitsConfirmed = 0;
+	LastShotWorldTimeSeconds = -1.0;
 	bCollisionSinceLastSample = false;
 	StopJumping();
 }
@@ -193,6 +204,73 @@ void ASimTraceCharacter::JumpCompleted(const FInputActionValue& Value)
 {
 	CurrentAction.bJumpPressed = false;
 	StopJumping();
+}
+
+void ASimTraceCharacter::FireInput(const FInputActionValue& Value)
+{
+	if (!Value.Get<bool>())
+	{
+		return;
+	}
+
+	CurrentAction.bFirePressed = true;
+	CurrentShotOutcome = ResolveShot();
+	LastShotOutcome = CurrentShotOutcome;
+	LastShotWorldTimeSeconds = GetWorld() ? GetWorld()->GetTimeSeconds() : 0.0;
+	++ShotsFired;
+	if (CurrentShotOutcome.bHit)
+	{
+		++HitsConfirmed;
+	}
+}
+
+FSimTraceShotOutcome ASimTraceCharacter::ResolveShot()
+{
+	constexpr double MaximumShotDistanceCentimeters = 10000.0;
+	FSimTraceShotOutcome Outcome;
+	Outcome.bShotFired = true;
+	Outcome.ShotId = ShotsFired;
+
+	const FVector Origin = FirstPersonCamera
+		? FirstPersonCamera->GetComponentLocation()
+		: GetActorLocation();
+	const FVector Direction = FirstPersonCamera
+		? FirstPersonCamera->GetForwardVector().GetSafeNormal()
+		: GetActorForwardVector().GetSafeNormal();
+	const FVector TraceEnd = Origin + Direction * MaximumShotDistanceCentimeters;
+	Outcome.Origin = Origin;
+	Outcome.Direction = Direction;
+	Outcome.ImpactPosition = TraceEnd;
+	Outcome.DistanceCentimeters = MaximumShotDistanceCentimeters;
+
+	FHitResult Hit;
+	FCollisionQueryParams QueryParams(
+		SCENE_QUERY_STAT(SimTraceOneBullet),
+		true,
+		this);
+	if (GetWorld() &&
+		GetWorld()->LineTraceSingleByChannel(
+			Hit,
+			Origin,
+			TraceEnd,
+			ECC_Visibility,
+			QueryParams))
+	{
+		Outcome.bHit = true;
+		Outcome.ImpactPosition = Hit.ImpactPoint;
+		Outcome.DistanceCentimeters =
+			FVector::Distance(Origin, Hit.ImpactPoint);
+		if (const UPrimitiveComponent* HitComponent = Hit.GetComponent())
+		{
+			Outcome.TargetId = HitComponent->GetFName().ToString();
+		}
+		if (Outcome.TargetId.IsEmpty())
+		{
+			Outcome.TargetId = TEXT("world");
+		}
+	}
+
+	return Outcome;
 }
 
 void ASimTraceCharacter::ManualAbortInput(const FInputActionValue& Value)

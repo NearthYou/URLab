@@ -53,6 +53,8 @@ private:
 	int32 SamplesWritten = 0;
 	int32 CapturesWritten = 0;
 	int32 CapturesDropped = 0;
+	int32 ShotsFired = 0;
+	int32 ShotsHit = 0;
 	ESimTraceEndReason LastEndReason = ESimTraceEndReason::None;
 	bool bRecording = false;
 

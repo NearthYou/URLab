@@ -19,6 +19,7 @@ PLOT_NAMES = (
     "episode_sizes.png",
     "episode_outcomes.png",
     "action_distributions.png",
+    "combat_ledger.png",
     "replay_error.png",
     "capture_performance.png",
 )
@@ -574,6 +575,7 @@ def _build_evidence_bundle(
         "outcomes": summary.get("outcomes", {}),
         "replay_comparison_count": len(summary.get("replay_comparisons", [])),
         "performance": summary.get("performance", {}),
+        "combat": summary.get("combat", {}),
     }
     evidence: dict[str, Any] = {
         "schema_version": 1,

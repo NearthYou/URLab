@@ -93,6 +93,8 @@ bool UEpisodeRecorderComponent::BeginEpisode(
 	SamplesWritten = 0;
 	CapturesWritten = 0;
 	CapturesDropped = 0;
+	ShotsFired = 0;
+	ShotsHit = 0;
 	LastEndReason = ESimTraceEndReason::None;
 
 	const FString UtcId = FString::Printf(
@@ -152,9 +154,12 @@ bool UEpisodeRecorderComponent::RecordFrame(
 	Sample.Velocity = Character->GetVelocity();
 	Sample.GoalRelative =
 		Character->GetActorTransform().InverseTransformPosition(Course->GetGoalLocation());
-	Sample.MoveInput = Character->GetCurrentAction().Move;
-	Sample.LookInput = Character->GetCurrentAction().Look;
-	Sample.bJumpPressed = Character->GetCurrentAction().bJumpPressed;
+	const FSimTraceActionState& CurrentAction = Character->GetCurrentAction();
+	Sample.MoveInput = CurrentAction.Move;
+	Sample.LookInput = CurrentAction.Look;
+	Sample.bJumpPressed = CurrentAction.bJumpPressed;
+	Sample.bFirePressed = CurrentAction.bFirePressed;
+	Sample.ShotOutcome = Character->GetCurrentShotOutcome();
 	Sample.bCollision = Character->ConsumeCollision();
 	Sample.bCaptured = bCaptured;
 	Sample.bCaptureDropped = bCaptureDropped;
@@ -181,6 +186,14 @@ bool UEpisodeRecorderComponent::RecordFrame(
 	if (bCaptureDropped)
 	{
 		++CapturesDropped;
+	}
+	if (Sample.ShotOutcome.bShotFired)
+	{
+		++ShotsFired;
+		if (Sample.ShotOutcome.bHit)
+		{
+			++ShotsHit;
+		}
 	}
 	return true;
 }
@@ -222,7 +235,7 @@ bool UEpisodeRecorderComponent::WriteManifest(
 
 	const FSimTraceCourseLayout& Layout = Course->GetLayout();
 	const TSharedRef<FJsonObject> Manifest = MakeShared<FJsonObject>();
-	Manifest->SetNumberField(TEXT("schema_version"), 1);
+	Manifest->SetNumberField(TEXT("schema_version"), 2);
 	Manifest->SetStringField(TEXT("episode_id"), EpisodeId);
 	Manifest->SetStringField(TEXT("mode"), LexToString(RuntimeConfig.Mode));
 	Manifest->SetNumberField(TEXT("seed"), Layout.Seed);
@@ -231,6 +244,7 @@ bool UEpisodeRecorderComponent::WriteManifest(
 	Manifest->SetArrayField(TEXT("start_position_cm"), VectorToJson(Layout.StartTransform.GetLocation()));
 	Manifest->SetArrayField(TEXT("start_rotation_deg"), RotatorToJson(Layout.StartTransform.Rotator()));
 	Manifest->SetArrayField(TEXT("goal_position_cm"), VectorToJson(Layout.GoalTransform.GetLocation()));
+	Manifest->SetArrayField(TEXT("target_position_cm"), VectorToJson(Layout.TargetTransform.GetLocation()));
 	Manifest->SetStringField(TEXT("engine_version"), FEngineVersion::Current().ToString());
 
 	Manifest->SetStringField(TEXT("git_revision"), ResolveGitRevision());
@@ -249,6 +263,17 @@ bool UEpisodeRecorderComponent::WriteManifest(
 	Manifest->SetNumberField(TEXT("trajectory_frames"), SamplesWritten);
 	Manifest->SetNumberField(TEXT("capture_frames"), CapturesWritten);
 	Manifest->SetNumberField(TEXT("capture_dropped"), CapturesDropped);
+	Manifest->SetStringField(
+		TEXT("combat_contract"),
+		TEXT("one_bullet_outcome_ledger_v1"));
+	Manifest->SetStringField(TEXT("primary_target_id"), TEXT("target_alpha"));
+	Manifest->SetNumberField(TEXT("shots_fired"), ShotsFired);
+	Manifest->SetNumberField(TEXT("shots_hit"), ShotsHit);
+	Manifest->SetNumberField(
+		TEXT("shot_hit_rate"),
+		ShotsFired > 0
+			? static_cast<double>(ShotsHit) / static_cast<double>(ShotsFired)
+			: 0.0);
 	Manifest->SetNumberField(TEXT("file_count"), PayloadFileCount + 1);
 	Manifest->SetStringField(TEXT("started_utc"), StartedUtc.ToIso8601());
 	Manifest->SetNumberField(

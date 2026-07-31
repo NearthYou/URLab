@@ -13,6 +13,7 @@
 #include "SimTraceCaptureComponent.h"
 #include "SimTraceCourseActor.h"
 #include "SimTraceGameInstance.h"
+#include "SimTraceHUD.h"
 #include "SimTracePlayerController.h"
 #include "EpisodeRecorderComponent.h"
 #include "TimerManager.h"
@@ -29,6 +30,7 @@ ASimTraceGameMode::ASimTraceGameMode()
 	PrimaryActorTick.TickGroup = TG_PostPhysics;
 	DefaultPawnClass = ASimTraceCharacter::StaticClass();
 	PlayerControllerClass = ASimTracePlayerController::StaticClass();
+	HUDClass = ASimTraceHUD::StaticClass();
 
 	Recorder = CreateDefaultSubobject<UEpisodeRecorderComponent>(TEXT("EpisodeRecorder"));
 }
@@ -185,6 +187,16 @@ void ASimTraceGameMode::RequestManualAbort()
 	bManualAbortRequested = true;
 }
 
+int32 ASimTraceGameMode::GetCurrentSeed() const
+{
+	return Course ? Course->GetLayout().Seed : 0;
+}
+
+int32 ASimTraceGameMode::GetCurrentSimFrame() const
+{
+	return Recorder ? Recorder->GetNextFrameIndex() : 0;
+}
+
 void ASimTraceGameMode::StartEpisode()
 {
 	USimTraceGameInstance* GameInstance = GetGameInstance<USimTraceGameInstance>();
@@ -241,6 +253,7 @@ void ASimTraceGameMode::StartEpisode()
 	bCaptureReady = !Config.bCapture ||
 		SimTraceCharacter->GetCaptureComponent()->InitializeCapture();
 	BotWaypointIndex = 0;
+	bBotShotFired = false;
 	bManualAbortRequested = false;
 	// Let CharacterMovement resolve the teleported capsule against the floor
 	// before frame zero and the native replay begin.
@@ -448,8 +461,11 @@ bool ASimTraceGameMode::LoadReplayInput(int32& OutSeed)
 		const TArray<TSharedPtr<FJsonValue>>* Look = nullptr;
 		double SimFrameValue = 0.0;
 		double TimestampValue = 0.0;
+		double SchemaVersionValue = 0.0;
 		bool bDone = false;
-		if (!Object->TryGetNumberField(TEXT("sim_frame"), SimFrameValue) ||
+		if (!Object->TryGetNumberField(TEXT("schema_version"), SchemaVersionValue) ||
+			(SchemaVersionValue != 1.0 && SchemaVersionValue != 2.0) ||
+			!Object->TryGetNumberField(TEXT("sim_frame"), SimFrameValue) ||
 			SimFrameValue != static_cast<double>(Index) ||
 			!Object->TryGetNumberField(TEXT("timestamp_s"), TimestampValue) ||
 			!FMath::IsNearlyEqual(
@@ -484,6 +500,11 @@ bool ASimTraceGameMode::LoadReplayInput(int32& OutSeed)
 		}
 		Action.Move = FVector2D((*Move)[0]->AsNumber(), (*Move)[1]->AsNumber());
 		Action.Look = FVector2D((*Look)[0]->AsNumber(), (*Look)[1]->AsNumber());
+		if (SchemaVersionValue >= 2.0 &&
+			!Object->TryGetBoolField(TEXT("fire_pressed"), Action.bFirePressed))
+		{
+			return false;
+		}
 		LoadedActions.Add(Action);
 	}
 
@@ -525,10 +546,34 @@ FSimTraceActionState ASimTraceGameMode::BuildBotAction() const
 	Action.Move.X = FMath::Clamp(FVector::DotProduct(Direction, Right), -1.0, 1.0);
 	Action.Move.Y = FMath::Clamp(FVector::DotProduct(Direction, Forward), -1.0, 1.0);
 
-	const double DesiredYaw = Direction.Rotation().Yaw;
+	const double X = SimTraceCharacter->GetActorLocation().X;
+	double DesiredYaw = Direction.Rotation().Yaw;
+	double DesiredPitch = 0.0;
+	const bool bInFiringWindow =
+		!bBotShotFired && X >= 2500.0 && X <= 2910.0;
+	if (bInFiringWindow)
+	{
+		const FVector CameraLocation =
+			SimTraceCharacter->GetActorLocation() + FVector(0.0, 0.0, 64.0);
+		const FRotator TargetRotation =
+			(Course->GetRangeTargetLocation() - CameraLocation).Rotation();
+		DesiredYaw = TargetRotation.Yaw;
+		DesiredPitch = TargetRotation.Pitch;
+	}
+
 	const double CurrentYaw = SimTraceCharacter->GetControlRotation().Yaw;
+	const double CurrentPitch = SimTraceCharacter->GetControlRotation().Pitch;
 	const double YawDelta = FMath::FindDeltaAngleDegrees(CurrentYaw, DesiredYaw);
+	const double PitchDelta = FMath::FindDeltaAngleDegrees(CurrentPitch, DesiredPitch);
 	Action.Look.X = FMath::Clamp(YawDelta * 0.08, -2.0, 2.0);
+	Action.Look.Y = FMath::Clamp(PitchDelta * 0.08, -2.0, 2.0);
+	if (bInFiringWindow &&
+		FMath::Abs(YawDelta) <= 2.0 &&
+		FMath::Abs(PitchDelta) <= 2.0)
+	{
+		Action.bFirePressed = true;
+		bBotShotFired = true;
+	}
 
 	FHitResult Hit;
 	const FVector TraceStart = SimTraceCharacter->GetActorLocation() + FVector(0.0, 0.0, 20.0);
@@ -536,7 +581,6 @@ FSimTraceActionState ASimTraceGameMode::BuildBotAction() const
 	FCollisionQueryParams Params(SCENE_QUERY_STAT(SimTraceBotJump), false, SimTraceCharacter);
 	const bool bObstacleAhead =
 		GetWorld()->LineTraceSingleByChannel(Hit, TraceStart, TraceEnd, ECC_Visibility, Params);
-	const double X = SimTraceCharacter->GetActorLocation().X;
 	Action.bJumpPressed = bObstacleAhead || (X > 1630.0 && X < 1840.0);
 	return Action;
 }

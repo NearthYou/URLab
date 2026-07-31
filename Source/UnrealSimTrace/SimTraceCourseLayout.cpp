@@ -20,10 +20,11 @@ namespace
 	FString BuildCourseHash(const FSimTraceCourseLayout& Layout)
 	{
 		FString Canonical = FString::Printf(
-			TEXT("seed=%d|start=%s|goal=%s|gate=%.3f"),
+			TEXT("seed=%d|start=%s|goal=%s|target=%s|gate=%.3f"),
 			Layout.Seed,
 			*Layout.StartTransform.ToString(),
 			*Layout.GoalTransform.ToString(),
+			*Layout.TargetTransform.ToString(),
 			Layout.GateCenterY);
 
 		for (const FSimTraceCourseElement& Element : Layout.Elements)
@@ -47,6 +48,9 @@ FSimTraceCourseLayout FSimTraceCourseLayout::Generate(const int32 InSeed)
 	Layout.Seed = InSeed;
 	Layout.StartTransform = FTransform(FRotator::ZeroRotator, FVector(100.0, 0.0, 96.0));
 	Layout.GoalTransform = FTransform(FRotator::ZeroRotator, FVector(3100.0, 0.0, 100.0));
+	Layout.TargetTransform = FTransform(
+		FRotator::ZeroRotator,
+		FVector(2940.0, 0.0, 170.0));
 
 	FRandomStream Random(InSeed);
 	const double SlalomY1 = 160.0 + Random.RandRange(-30, 30);
@@ -62,7 +66,27 @@ FSimTraceCourseLayout FSimTraceCourseLayout::Generate(const int32 InSeed)
 		MakeElement(TEXT("slalom_2"), FVector(1050.0, SlalomY2, 90.0), FVector(120.0, 120.0, 180.0)),
 		MakeElement(TEXT("slalom_3"), FVector(1400.0, SlalomY3, 90.0), FVector(120.0, 120.0, 180.0)),
 		MakeElement(TEXT("jump"), FVector(1800.0, 0.0, 30.0), FVector(40.0, 650.0, 60.0)),
-		MakeElement(TEXT("gate"), FVector(2400.0, Layout.GateCenterY, 100.0), FVector(80.0, 800.0, 200.0))
+		MakeElement(TEXT("gate"), FVector(2400.0, Layout.GateCenterY, 100.0), FVector(80.0, 800.0, 200.0)),
+		MakeElement(
+			TEXT("target_alpha"),
+			Layout.TargetTransform.GetLocation(),
+			FVector(20.0, 120.0, 120.0)),
+		MakeElement(
+			TEXT("dressing_cover_left"),
+			FVector(430.0, -340.0, 55.0),
+			FVector(220.0, 100.0, 110.0)),
+		MakeElement(
+			TEXT("dressing_cover_right"),
+			FVector(1180.0, 340.0, 55.0),
+			FVector(220.0, 100.0, 110.0)),
+		MakeElement(
+			TEXT("dressing_crates_left"),
+			FVector(2080.0, -340.0, 45.0),
+			FVector(150.0, 100.0, 90.0)),
+		MakeElement(
+			TEXT("dressing_crates_right"),
+			FVector(2700.0, 340.0, 45.0),
+			FVector(150.0, 100.0, 90.0))
 	};
 
 	Layout.Waypoints = {
@@ -82,4 +106,3 @@ FSimTraceCourseLayout FSimTraceCourseLayout::Generate(const int32 InSeed)
 	Layout.CourseHash = BuildCourseHash(Layout);
 	return Layout;
 }
-

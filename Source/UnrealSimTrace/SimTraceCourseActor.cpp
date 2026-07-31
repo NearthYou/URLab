@@ -2,10 +2,14 @@
 
 #include "Components/BoxComponent.h"
 #include "Components/DirectionalLightComponent.h"
+#include "Components/ExponentialHeightFogComponent.h"
 #include "Components/PointLightComponent.h"
+#include "Components/SkyLightComponent.h"
 #include "Components/SkyAtmosphereComponent.h"
 #include "Components/StaticMeshComponent.h"
 #include "Engine/StaticMesh.h"
+#include "Materials/MaterialInstanceDynamic.h"
+#include "Materials/MaterialInterface.h"
 #include "GameFramework/Character.h"
 #include "Net/UnrealNetwork.h"
 #include "UObject/ConstructorHelpers.h"
@@ -35,6 +39,13 @@ ASimTraceCourseActor::ASimTraceCourseActor()
 	SunLight->SetRelativeRotation(FRotator(-45.0, -35.0, 0.0));
 	SunLight->SetIntensity(8.0f);
 	SunLight->SetAtmosphereSunLight(true);
+	SunLight->SetLightColor(FLinearColor(1.0f, 0.86f, 0.68f));
+
+	HeightFog = CreateDefaultSubobject<UExponentialHeightFogComponent>(TEXT("HeightFog"));
+	HeightFog->SetupAttachment(SceneRoot);
+	HeightFog->SetFogDensity(0.008f);
+	HeightFog->SetFogHeightFalloff(0.24f);
+	HeightFog->SetFogInscatteringColor(FLinearColor(0.52f, 0.56f, 0.48f));
 
 	FillLightNear = CreateDefaultSubobject<UPointLightComponent>(TEXT("FillLightNear"));
 	FillLightNear->SetupAttachment(SceneRoot);
@@ -54,8 +65,17 @@ ASimTraceCourseActor::ASimTraceCourseActor()
 	FillLightFar->SetIntensity(20000.0f);
 	FillLightFar->SetAttenuationRadius(1800.0f);
 
+	SkyLight = CreateDefaultSubobject<USkyLightComponent>(TEXT("SkyLight"));
+	SkyLight->SetupAttachment(SceneRoot);
+	SkyLight->SetMobility(EComponentMobility::Movable);
+	SkyLight->SetIntensity(1.4f);
+	SkyLight->SetRealTimeCapture(false);
+
 	static ConstructorHelpers::FObjectFinder<UStaticMesh> CubeFinder(TEXT("/Engine/BasicShapes/Cube.Cube"));
 	CubeMesh = CubeFinder.Object;
+	static ConstructorHelpers::FObjectFinder<UMaterialInterface> MaterialFinder(
+		TEXT("/Engine/BasicShapes/BasicShapeMaterial.BasicShapeMaterial"));
+	BaseShapeMaterial = MaterialFinder.Object;
 }
 
 void ASimTraceCourseActor::SetCourseSeed(const int32 InSeed)
@@ -111,12 +131,23 @@ void ASimTraceCourseActor::BuildCourse()
 			AddGate();
 			continue;
 		}
+		if (Element.Name == TEXT("target_alpha"))
+		{
+			AddRangeTarget(Element);
+			continue;
+		}
+		if (Element.Name.ToString().StartsWith(TEXT("dressing_")))
+		{
+			AddBox(Element.Name, Element.Transform, Element.Dimensions, false);
+			continue;
+		}
 
 		AddBox(Element.Name, Element.Transform, Element.Dimensions);
 	}
 
 	GoalTrigger->SetWorldLocation(Layout.GoalTransform.GetLocation());
 	AddGoalVisuals();
+	SkyLight->RecaptureSky();
 	ResetGoal();
 }
 
@@ -142,6 +173,7 @@ UStaticMeshComponent* ASimTraceCourseActor::AddBox(
 		Mesh->SetMobility(EComponentMobility::Movable);
 		Mesh->RegisterComponent();
 		RuntimeMeshes.Add(Name, Mesh);
+		ApplyPalette(Name, Mesh);
 	}
 
 	Mesh->SetWorldTransform(Transform);
@@ -188,4 +220,79 @@ void ASimTraceCourseActor::AddGoalVisuals()
 		FTransform(FRotator::ZeroRotator, FVector(3100.0, 0.0, 250.0)),
 		FVector(40.0, 640.0, 40.0),
 		false);
+}
+
+void ASimTraceCourseActor::AddRangeTarget(
+	const FSimTraceCourseElement& Element)
+{
+	UStaticMeshComponent* Target =
+		AddBox(Element.Name, Element.Transform, Element.Dimensions, false);
+	if (!Target)
+	{
+		return;
+	}
+
+	Target->SetCollisionEnabled(ECollisionEnabled::QueryOnly);
+	Target->SetCollisionResponseToAllChannels(ECR_Ignore);
+	Target->SetCollisionResponseToChannel(ECC_Visibility, ECR_Block);
+	Target->ComponentTags.AddUnique(TEXT("SimTraceTarget"));
+}
+
+void ASimTraceCourseActor::ApplyPalette(
+	const FName Name,
+	UStaticMeshComponent* Mesh)
+{
+	if (!BaseShapeMaterial || !Mesh)
+	{
+		return;
+	}
+
+	UMaterialInstanceDynamic* Material =
+		UMaterialInstanceDynamic::Create(
+			BaseShapeMaterial,
+			this,
+			*FString::Printf(TEXT("MID_%s"), *Name.ToString()));
+	if (!Material)
+	{
+		return;
+	}
+	Material->SetVectorParameterValue(TEXT("Color"), ColorForElement(Name));
+	Material->SetScalarParameterValue(TEXT("Roughness"), 0.82f);
+	Mesh->SetMaterial(0, Material);
+	RuntimeMaterials.Add(Name, Material);
+}
+
+FLinearColor ASimTraceCourseActor::ColorForElement(const FName Name) const
+{
+	const FString Value = Name.ToString();
+	if (Value == TEXT("floor"))
+	{
+		return FLinearColor(0.16f, 0.19f, 0.12f);
+	}
+	if (Value.StartsWith(TEXT("wall_")))
+	{
+		return FLinearColor(0.27f, 0.29f, 0.27f);
+	}
+	if (Value.StartsWith(TEXT("slalom_")) ||
+		Value.Contains(TEXT("crates")))
+	{
+		return FLinearColor(0.42f, 0.28f, 0.13f);
+	}
+	if (Value.Contains(TEXT("cover")))
+	{
+		return FLinearColor(0.22f, 0.31f, 0.19f);
+	}
+	if (Value.StartsWith(TEXT("gate_")) || Value == TEXT("jump"))
+	{
+		return FLinearColor(0.32f, 0.34f, 0.31f);
+	}
+	if (Value == TEXT("target_alpha"))
+	{
+		return FLinearColor(0.78f, 0.16f, 0.08f);
+	}
+	if (Value.StartsWith(TEXT("goal_")))
+	{
+		return FLinearColor(0.86f, 0.62f, 0.12f);
+	}
+	return FLinearColor(0.35f, 0.36f, 0.32f);
 }

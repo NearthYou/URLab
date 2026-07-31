@@ -1,6 +1,6 @@
 # Unreal SimTrace
 
-Unreal SimTrace는 Unreal 플레이를 재현 가능한 AI 연구 데이터로 저장하고 검증하는 도구다. Level, Blueprint, Input Action asset을 만들지 않고 `/Engine/Maps/Entry`에서 C++가 코스, 캐릭터, 입력, 조명, 센서를 실행 시점에 생성한다.
+Unreal SimTrace는 Unreal 플레이를 재현 가능한 AI 연구 데이터로 저장하고 검증하는 도구다. 이동 궤적뿐 아니라 한 번의 발사가 `fire → shot → hit/miss`로 이어지는 결과를 같은 simulation frame에 기록하고 JSON 입력 재생에서 사건 전체가 같은지 비교한다. Level, Blueprint, Input Action asset을 만들지 않고 `/Engine/Maps/Entry`에서 C++가 코스, 캐릭터, 입력, 조명, 센서와 사격장을 실행 시점에 생성한다.
 
 현재 구현은 Unreal Engine 5.8.1 Editor Development 환경을 대상으로 한다.
 
@@ -61,12 +61,16 @@ flowchart LR
     C --> D["Unreal CharacterMovement"]
     D --> E["PostPhysics 상태 기록"]
     E --> F["trajectory.jsonl"]
+    C --> K["fire → shot → hit/miss"]
+    K --> F
     E --> G["3 frame마다 RGB와 Depth"]
     G --> H["백그라운드 PNG 저장"]
     C --> I["Unreal native Replay"]
     F --> J["Python validator와 report"]
     H --> J
     I --> J
+    L["PUBG 공식 telemetry"] --> M["Saved raw와 익명 집계"]
+    M --> J
 ```
 
 episode를 reset한 뒤에는 사람 입력을 잠근 상태로 PostPhysics 한 프레임을
@@ -81,11 +85,13 @@ warm-up하고, 그 다음 프레임부터 recorder와 native Replay를 함께 �
 | 결정적 코스 생성과 hash | `SimTraceCourseLayout`, `SimTraceCourseActor` |
 | 런타임 입력과 1인칭 캐릭터 | `SimTraceCharacter`, `SimTracePlayerController` |
 | episode 상태와 봇, 입력 재생 | `SimTraceGameMode` |
+| 런타임 조준점과 사격 결과 HUD | `SimTraceHUD` |
 | JSONL과 manifest | `EpisodeRecorderComponent` |
 | RGB와 Depth, 비동기 PNG | `SimTraceCaptureComponent` |
 | native Replay | `SimTraceGameInstance` |
 | 데이터 검증과 보고서 집계 | `Scripts/validate_dataset.py` |
 | Matplotlib 그래프 생성 | `Scripts/simtrace_plots.py` |
+| PUBG telemetry 수집과 익명 집계 | `Scripts/pubg_telemetry.py` |
 | 추적 가능한 샘플과 60초 증거 영상 | `Scripts/publish_evidence.py` |
 
 ## 요구 환경
@@ -97,7 +103,7 @@ warm-up하고, 그 다음 프레임부터 recorder와 native Replay를 함께 �
 - Python 3.13
 - `ffmpeg`, `ffprobe`는 증거 영상 갱신에만 필요
 
-프로젝트 전용 `.uasset`은 필요하지 않다. Engine의 `/Engine/BasicShapes/Cube`만 런타임에 참조한다.
+프로젝트 전용 `.uasset`은 필요하지 않다. Engine의 `/Engine/BasicShapes/Cube`와 기본 material만 런타임에 참조하고, 동적 material로 올리브, 콘크리트, 러스트 계열의 전장 훈련장 팔레트를 적용한다.
 
 ## 설치와 빌드
 
@@ -140,6 +146,7 @@ powershell -ExecutionPolicy Bypass -File Scripts/run_simtrace.ps1 `
 |---|---|
 | W, A, S, D | 이동 |
 | 마우스 | 시점 |
+| 마우스 왼쪽 버튼 | hitscan 한 발 발사와 결과 기록 |
 | Space | 점프 |
 | R | 현재 episode를 manual_abort로 종료하고 다음 시드 시작 |
 | Esc | 프로그램 종료 |
@@ -157,7 +164,7 @@ powershell -ExecutionPolicy Bypass -File Scripts/run_simtrace.ps1 `
   -Headless
 ```
 
-봇은 NavMesh나 Behavior Tree 없이 정해진 waypoint와 전방 Ray Cast를 사용한다. 봇 입력도 사람과 같은 Enhanced Input action으로 주입된다.
+봇은 NavMesh나 Behavior Tree 없이 정해진 waypoint와 전방 Ray Cast를 사용한다. 목표판을 조준해 한 발을 발사하며, 이동과 사격 입력 모두 사람과 같은 Enhanced Input action으로 주입한다.
 
 ### JSON 입력 재생
 
@@ -201,6 +208,41 @@ powershell -ExecutionPolicy Bypass -File Scripts/run_simtrace.ps1 `
 
 보고서는 bot mode의 capture on/off만 성능 비교에 사용한다.
 
+### PUBG telemetry 가져오기
+
+API key는 명령행 인자로 받지 않고 현재 PowerShell process의 환경변수로만 전달한다.
+
+```powershell
+$secureKey = Read-Host "PUBG API key" -AsSecureString
+$env:PUBG_API_KEY = [Net.NetworkCredential]::new("", $secureKey).Password
+
+uv run python Scripts/pubg_telemetry.py fetch `
+  --platform steam `
+  --player-name "<PUBG player name>"
+```
+
+match ID를 이미 알고 있으면 `--player-name` 대신 `--match-id "<match-id>"`를 사용한다. importer는 공식 match endpoint에서 관련 telemetry asset을 찾고 gzip JSON을 내려받는다. API 응답과 telemetry 원본, 원본 URL을 포함한 private provenance는 다음 경로에만 저장된다.
+
+```text
+Saved/SimTrace/imports/pubg/raw/<platform>/<match-id>/
+```
+
+계정 ID와 player name을 제외한 공격, 피해, knock, kill, 위치 표본과 phase 통계는 hash 기반 provenance와 함께 `Saved/SimTrace/imports/pubg/derived`에 저장된다. `LogPlayerKillV2`의 거리는 공식 `DamageInfo` 중 `finishDamageInfo`, `killerDamageInfo`, `dBNODamageInfo` 순서로 복원한다. 공개 저장소로 복사할 때는 top-level과 중첩 객체의 정확한 field 구성을 다시 검사하고, 검증된 값으로 새 summary를 만든다.
+
+```powershell
+uv run python Scripts/pubg_telemetry.py publish `
+  "Saved/SimTrace/imports/pubg/derived/<platform>/<hash>/summary.json" `
+  --output "docs/evidence/pubg/<match-hash>.json"
+```
+
+공개 summary에는 원본 match ID 대신 SHA-256만 남고 `raw_data_publishable=false`, `contains_player_identifiers=false`가 기록된다. API key는 어느 파일에도 쓰지 않는다. PUBG Developer API의 기본 key는 공식 문서 기준 분당 10회 제한이므로 batch crawler는 구현하지 않았다.
+
+### 런타임 사격장 표현
+
+화면은 PUBG의 야외 전투 훈련장 인상을 참고해 올리브색 바닥, 콘크리트 벽, 러스트색 엄폐물, 붉은 목표판, 중앙 조준점과 사격 결과 패널로 구성했다. 모든 geometry, material instance와 HUD는 C++가 실행 중 생성하므로 프로젝트 전용 asset 편집은 없다.
+
+PUBG 로고, 원본 맵 배치, 추출한 model과 texture는 포함하지 않는다. 외부 소품을 더할 때는 [Poly Haven CC0](https://polyhaven.com/license) 또는 [Kenney CC0](https://kenney.nl/support) asset page, license, 원본 파일 SHA-256을 함께 보존한다. 현재 기본 실행은 외부 model 없이 같은 결과를 재현한다.
+
 ## 데이터 구조
 
 ```text
@@ -231,7 +273,7 @@ episode_20260730T130155085Z_bot_s1000_00
 
 ```json
 {
-  "schema_version": 1,
+  "schema_version": 2,
   "sim_frame": 42,
   "timestamp_s": 1.4,
   "delta_s": 0.033333,
@@ -242,6 +284,25 @@ episode_20260730T130155085Z_bot_s1000_00
   "move_input": [1.0, 0.0],
   "look_input": [0.15, -0.03],
   "jump_pressed": false,
+  "fire_pressed": true,
+  "combat_events": [
+    {"sequence": 0, "event": "fire", "shot_id": 0},
+    {
+      "sequence": 1,
+      "event": "shot",
+      "shot_id": 0,
+      "origin_cm": [120.0, 35.0, 154.0],
+      "direction": [1.0, 0.0, 0.0]
+    },
+    {
+      "sequence": 2,
+      "event": "hit",
+      "shot_id": 0,
+      "target_id": "target_alpha",
+      "impact_position_cm": [2930.0, 6.4, 168.0],
+      "distance_cm": 2810.2
+    }
+  ],
   "collision": false,
   "captured": true,
   "rgb_path": "rgb/000042.png",
@@ -252,6 +313,8 @@ episode_20260730T130155085Z_bot_s1000_00
   "end_reason": ""
 }
 ```
+
+사격하지 않은 frame은 `fire_pressed=false`, `combat_events=[]`다. 발사 frame은 순서가 고정된 세 사건을 갖고 마지막 사건만 `hit` 또는 `miss`가 된다. `shot_id`는 episode 안에서 0부터 증가한다. manifest의 `combat_contract`, `shots_fired`, `shots_hit`, `shot_hit_rate`는 전체 JSONL 원장과 일치해야 한다. validator는 기존 schema 1 episode도 계속 읽지만 새 수집은 schema 2로 기록한다.
 
 `timestamp_s`는 실제 경과 시간이 아니라 `sim_frame / 30`으로 계산한다. 마지막 행은 항상 `done=true`이며 다음 종료 원인 중 하나를 갖는다.
 
@@ -315,6 +378,7 @@ uv run python Scripts/validate_dataset.py report `
 - `episode_sizes.png`
 - `episode_outcomes.png`
 - `action_distributions.png`
+- `combat_ledger.png`
 - `replay_error.png`
 - `capture_performance.png`
 
@@ -343,6 +407,8 @@ validator는 다음을 실패로 처리한다.
 - manifest와 실제 frame, 파일 수, byte 수 불일치
 - native Replay archive 누락
 - JSON 재생의 잘못된 부모 또는 frame 정렬
+- `fire → shot → hit/miss` 사건 순서, shot ID 또는 manifest 집계 불일치
+- JSON 재생의 사격 action과 outcome 원장 불일치
 
 ## 테스트
 
@@ -370,6 +436,7 @@ Unreal Automation Tests를 실행한다.
 - 같은 seed의 course hash, 시작과 목표 일치
 - 다른 seed의 코스 변화
 - trajectory JSON 직렬화
+- 런타임 fire mapping, HUD class와 사격 원장 직렬화
 - 30 Hz timestamp
 - 실행 옵션 parsing과 안전한 clamp
 - Depth uint16 변환과 saturation
@@ -378,6 +445,8 @@ Unreal Automation Tests를 실행한다.
 - total byte 교차 검사
 - manifest total byte 자릿수 경계 수렴
 - JSON 재생 부모와 전체 frame 정렬
+- JSON 재생의 exact combat event 비교
+- PUBG telemetry gzip, 공식 CDN, KillV2 거리, 익명 집계와 재귀 공개 whitelist
 - 상수에 가까운 행동값의 report 생성
 - 성능 비교에서 bot capture on/off만 선택
 
@@ -403,3 +472,7 @@ Unreal Automation Tests를 실행한다.
 - [SceneCaptureComponent2D](https://dev.epicgames.com/documentation/en-us/unreal-engine/API/Runtime/Engine/USceneCaptureComponent2D)
 - [Replay System](https://dev.epicgames.com/documentation/en-us/unreal-engine/using-the-replay-system-in-unreal-engine)
 - [Automation Tests](https://dev.epicgames.com/documentation/unreal-engine/run-automation-tests-in-unreal-engine)
+- [PUBG Telemetry](https://documentation.pubg.com/en/telemetry.html)
+- [PUBG Telemetry Events](https://documentation.pubg.com/en/telemetry-events.html)
+- [PUBG API Keys](https://documentation.pubg.com/en/api-keys.html)
+- [PUBG API Terms](https://developer.pubg.com/tos?locale=en)

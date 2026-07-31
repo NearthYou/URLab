@@ -99,6 +99,30 @@ def write_plots(
     plt.close()
     plot_paths.append(path.name)
 
+    combat_totals: dict[str, list[int]] = {}
+    for result in results:
+        mode = str(result["mode"])
+        totals = combat_totals.setdefault(mode, [0, 0])
+        totals[0] += int(result.get("shots_fired", 0))
+        totals[1] += int(result.get("shots_hit", 0))
+    combat_modes = sorted(combat_totals)
+    shots = [combat_totals[mode][0] for mode in combat_modes]
+    hits = [combat_totals[mode][1] for mode in combat_modes]
+    plt.figure(figsize=(8, 4.5))
+    if combat_modes:
+        x = np.arange(len(combat_modes))
+        plt.bar(x - 0.2, shots, width=0.4, label="shots", color="#d08c47")
+        plt.bar(x + 0.2, hits, width=0.4, label="hits", color="#7f5539")
+        plt.xticks(x, combat_modes)
+        plt.legend()
+    plt.ylabel("Events")
+    plt.title("One Bullet Outcome Ledger")
+    plt.tight_layout()
+    path = output / "combat_ledger.png"
+    plt.savefig(path, dpi=150)
+    plt.close()
+    plot_paths.append(path.name)
+
     plt.figure(figsize=(8, 4.5))
     if comparisons:
         labels = [f"seed {item['seed']}" for item in comparisons]

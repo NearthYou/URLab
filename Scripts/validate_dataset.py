@@ -34,6 +34,8 @@ VALID_END_REASONS = {
     "io_error",
     "replay_source_end",
 }
+SUPPORTED_SCHEMA_VERSIONS = {1, 2}
+COMBAT_CONTRACT = "one_bullet_outcome_ledger_v1"
 
 
 def _load_json(path: Path) -> dict[str, Any]:
@@ -91,6 +93,96 @@ def _safe_vector(row: dict[str, Any], field: str, size: int) -> list[float]:
     return [float(item) for item in value]
 
 
+def _validate_combat_ledger(
+    row: dict[str, Any],
+    frame: int,
+    expected_shot_id: int,
+    errors: list[str],
+) -> tuple[int, bool, bool]:
+    fire_pressed = row.get("fire_pressed")
+    if not isinstance(fire_pressed, bool):
+        errors.append(f"frame {frame} fire_pressed must be boolean")
+        fire_pressed = False
+
+    events = row.get("combat_events")
+    if not isinstance(events, list):
+        errors.append(f"frame {frame} combat_events must be an array")
+        return expected_shot_id, False, False
+
+    if not fire_pressed:
+        if events:
+            errors.append(
+                f"frame {frame} has combat events without fire_pressed=true"
+            )
+        return expected_shot_id, False, False
+
+    if len(events) != 3 or any(not isinstance(event, dict) for event in events):
+        errors.append(
+            f"frame {frame} combat event order must be fire, shot, hit or miss"
+        )
+        return expected_shot_id, True, False
+
+    event_names = [event.get("event") for event in events]
+    outcome_name = event_names[2]
+    if (
+        event_names[:2] != ["fire", "shot"]
+        or not isinstance(outcome_name, str)
+        or outcome_name not in {"hit", "miss"}
+        or [event.get("sequence") for event in events] != [0, 1, 2]
+    ):
+        errors.append(
+            f"frame {frame} combat event order must be fire, shot, hit or miss"
+        )
+
+    shot_ids = [event.get("shot_id") for event in events]
+    if any(
+        not isinstance(shot_id, int) or isinstance(shot_id, bool)
+        for shot_id in shot_ids
+    ):
+        errors.append(f"frame {frame} combat shot_id must be an integer")
+    elif len(set(shot_ids)) != 1 or shot_ids[0] != expected_shot_id:
+        errors.append(
+            f"frame {frame} combat shot_id is not the next sequential id "
+            f"{expected_shot_id}"
+        )
+
+    shot = events[1]
+    outcome = events[2]
+    try:
+        _safe_vector(shot, "origin_cm", 3)
+        direction = _safe_vector(shot, "direction", 3)
+        _safe_vector(outcome, "impact_position_cm", 3)
+        if not math.isclose(
+            math.sqrt(sum(value * value for value in direction)),
+            1.0,
+            abs_tol=1e-4,
+        ):
+            errors.append(f"frame {frame} shot direction must be unit length")
+    except (TypeError, ValueError) as error:
+        errors.append(f"frame {frame} combat event: {error}")
+
+    distance = outcome.get("distance_cm")
+    if (
+        isinstance(distance, bool)
+        or not isinstance(distance, (int, float))
+        or not math.isfinite(float(distance))
+        or float(distance) < 0
+    ):
+        errors.append(
+            f"frame {frame} combat distance_cm must be a non-negative "
+            "finite number"
+        )
+
+    hit = outcome_name == "hit"
+    target_id = outcome.get("target_id")
+    if hit and (not isinstance(target_id, str) or not target_id):
+        errors.append(f"frame {frame} hit event requires target_id")
+    if not hit and target_id is not None:
+        errors.append(f"frame {frame} miss event target_id must be null")
+
+    return expected_shot_id + 1, True, hit
+
+
 def validate_episode(episode: Path | str) -> dict[str, Any]:
     episode = Path(episode).resolve()
     errors: list[str] = []
@@ -103,10 +195,14 @@ def validate_episode(episode: Path | str) -> dict[str, Any]:
         "course_hash": "",
         "end_reason": "",
         "complete": False,
+        "schema_version": None,
         "trajectory_frames": 0,
         "capture_frames": 0,
         "capture_dropped": 0,
         "missing_capture_frames": 0,
+        "shots_fired": 0,
+        "shots_hit": 0,
+        "shot_hit_rate": 0.0,
         "file_count": 0,
         "total_bytes": 0,
         "errors": errors,
@@ -117,6 +213,7 @@ def validate_episode(episode: Path | str) -> dict[str, Any]:
         "_look_magnitudes": [],
         "_jump_values": [],
         "_collision_values": [],
+        "_fire_values": [],
     }
 
     partial_manifest = episode / "manifest.partial.json"
@@ -142,12 +239,19 @@ def validate_episode(episode: Path | str) -> dict[str, Any]:
             "course_hash": str(manifest.get("course_hash", "")),
             "end_reason": str(manifest.get("end_reason", "")),
             "complete": bool(manifest.get("complete", False)),
+            "schema_version": manifest.get("schema_version"),
         }
     )
     if manifest.get("complete") is not True:
         errors.append("manifest complete flag is false")
-    if manifest.get("schema_version") != 1:
+    schema_version = manifest.get("schema_version")
+    if (
+        not isinstance(schema_version, int)
+        or isinstance(schema_version, bool)
+        or schema_version not in SUPPORTED_SCHEMA_VERSIONS
+    ):
         errors.append("unsupported manifest schema_version")
+        schema_version = 1
     required_manifest_fields = {
         "episode_id",
         "mode",
@@ -181,6 +285,17 @@ def validate_episode(episode: Path | str) -> dict[str, Any]:
         "replay_archive_path",
         "complete",
     }
+    if schema_version >= 2:
+        required_manifest_fields.update(
+            {
+                "target_position_cm",
+                "combat_contract",
+                "primary_target_id",
+                "shots_fired",
+                "shots_hit",
+                "shot_hit_rate",
+            }
+        )
     for field in sorted(required_manifest_fields - manifest.keys()):
         errors.append(f"manifest field is missing: {field}")
     if manifest.get("episode_id") != episode.name:
@@ -208,6 +323,18 @@ def validate_episode(episode: Path | str) -> dict[str, Any]:
             _safe_vector(manifest, field, size)
         except (TypeError, ValueError) as error:
             errors.append(f"manifest: {error}")
+    if schema_version >= 2:
+        try:
+            _safe_vector(manifest, "target_position_cm", 3)
+        except (TypeError, ValueError) as error:
+            errors.append(f"manifest: {error}")
+        if manifest.get("combat_contract") != COMBAT_CONTRACT:
+            errors.append("manifest combat_contract is invalid")
+        if (
+            not isinstance(manifest.get("primary_target_id"), str)
+            or not manifest.get("primary_target_id")
+        ):
+            errors.append("manifest primary_target_id must be a non-empty string")
     git_revision = manifest.get("git_revision")
     if (
         not isinstance(git_revision, str)
@@ -258,6 +385,9 @@ def validate_episode(episode: Path | str) -> dict[str, Any]:
     captured_count = 0
     dropped_count = 0
     missing_capture_count = 0
+    expected_shot_id = 0
+    shots_fired = 0
+    shots_hit = 0
 
     for expected_frame, row in enumerate(rows):
         frame = row.get("sim_frame")
@@ -296,8 +426,27 @@ def validate_episode(episode: Path | str) -> dict[str, Any]:
                 f"frame {expected_frame} delta mismatch: "
                 f"{delta} != {expected_delta}"
             )
-        if row.get("schema_version") != 1:
-            errors.append(f"frame {expected_frame} has unsupported schema_version")
+        if row.get("schema_version") != schema_version:
+            errors.append(
+                f"frame {expected_frame} schema_version does not match manifest"
+            )
+
+        if schema_version >= 2:
+            (
+                expected_shot_id,
+                shot_fired,
+                shot_hit,
+            ) = _validate_combat_ledger(
+                row,
+                expected_frame,
+                expected_shot_id,
+                errors,
+            )
+            shots_fired += int(shot_fired)
+            shots_hit += int(shot_hit)
+            result["_fire_values"].append(shot_fired)
+        else:
+            result["_fire_values"].append(False)
 
         captured_value = row.get("captured")
         dropped_value = row.get("capture_dropped")
@@ -398,6 +547,9 @@ def validate_episode(episode: Path | str) -> dict[str, Any]:
     result["capture_frames"] = captured_count
     result["capture_dropped"] = dropped_count
     result["missing_capture_frames"] = missing_capture_count
+    result["shots_fired"] = shots_fired
+    result["shots_hit"] = shots_hit
+    result["shot_hit_rate"] = shots_hit / shots_fired if shots_fired else 0.0
 
     if not rows:
         errors.append("trajectory is empty")
@@ -421,6 +573,23 @@ def validate_episode(episode: Path | str) -> dict[str, Any]:
         errors.append("manifest capture_frames does not match trajectory.jsonl")
     if manifest.get("capture_dropped") != dropped_count:
         errors.append("manifest capture_dropped does not match trajectory.jsonl")
+    if schema_version >= 2:
+        if manifest.get("shots_fired") != shots_fired:
+            errors.append("manifest shots_fired does not match combat ledger")
+        if manifest.get("shots_hit") != shots_hit:
+            errors.append("manifest shots_hit does not match combat ledger")
+        manifest_hit_rate = manifest.get("shot_hit_rate")
+        if (
+            isinstance(manifest_hit_rate, bool)
+            or not isinstance(manifest_hit_rate, (int, float))
+            or not math.isfinite(float(manifest_hit_rate))
+            or not math.isclose(
+                float(manifest_hit_rate),
+                result["shot_hit_rate"],
+                abs_tol=1e-9,
+            )
+        ):
+            errors.append("manifest shot_hit_rate does not match combat ledger")
     if dropped_count:
         errors.append(f"episode contains {dropped_count} dropped captures")
     if capture_hz == 0 and captured_count:
@@ -554,6 +723,51 @@ def compare_episodes(
         original_manifest.get("course_hash")
         == replayed_manifest.get("course_hash")
     )
+    original_rows_by_frame = {
+        int(row["sim_frame"]): row for row in original_rows
+    }
+    replayed_rows_by_frame = {
+        int(row["sim_frame"]): row for row in replayed_rows
+    }
+    combat_mismatch_frames = [
+        frame
+        for frame in shared_frames
+        if {
+            "fire_pressed": original_rows_by_frame[frame].get(
+                "fire_pressed", False
+            ),
+            "combat_events": original_rows_by_frame[frame].get(
+                "combat_events", []
+            ),
+        }
+        != {
+            "fire_pressed": replayed_rows_by_frame[frame].get(
+                "fire_pressed", False
+            ),
+            "combat_events": replayed_rows_by_frame[frame].get(
+                "combat_events", []
+            ),
+        }
+    ]
+    missing_combat_frames = sorted(
+        original_by_frame.keys() ^ replayed_by_frame.keys()
+    )
+    combat_mismatch_frames = sorted(
+        set(combat_mismatch_frames + missing_combat_frames)
+    )
+    original_schema = original_manifest.get("schema_version")
+    replayed_schema = replayed_manifest.get("schema_version")
+    combat_event_applicable = (
+        isinstance(original_schema, int)
+        and not isinstance(original_schema, bool)
+        and original_schema >= 2
+        and isinstance(replayed_schema, int)
+        and not isinstance(replayed_schema, bool)
+        and replayed_schema >= 2
+    )
+    combat_event_match = (
+        frame_alignment_match and not combat_mismatch_frames
+    )
     within_target = (
         seed_match
         and parent_episode_match
@@ -563,6 +777,7 @@ def compare_episodes(
         and mean_error <= POSITION_TARGETS_CM["mean"]
         and p95_error <= POSITION_TARGETS_CM["p95"]
         and final_error <= POSITION_TARGETS_CM["final"]
+        and combat_event_match
     )
     return {
         "original_episode_id": original_episode_id,
@@ -573,6 +788,15 @@ def compare_episodes(
         "parent_episode_match": parent_episode_match,
         "frame_alignment_match": frame_alignment_match,
         "course_hash_match": course_hash_match,
+        "combat_event_applicable": combat_event_applicable,
+        "combat_event_match": combat_event_match,
+        "combat_mismatch_frames": combat_mismatch_frames,
+        "original_shots_fired": sum(
+            row.get("fire_pressed") is True for row in original_rows
+        ),
+        "replayed_shots_fired": sum(
+            row.get("fire_pressed") is True for row in replayed_rows
+        ),
         "start_position_error_cm": start_error,
         "mean_position_error_cm": mean_error,
         "p95_position_error_cm": p95_error,
@@ -684,6 +908,9 @@ def build_report(
         collisions = [
             value for result in matching for value in result["_collision_values"]
         ]
+        fires = [
+            value for result in matching for value in result["_fire_values"]
+        ]
         action_metrics[mode] = {
             "move_magnitude": _distribution(moves),
             "look_magnitude": _distribution(looks),
@@ -691,7 +918,38 @@ def build_report(
             "collision_rate": statistics.fmean(collisions)
             if collisions
             else 0.0,
+            "fire_rate": statistics.fmean(fires) if fires else 0.0,
         }
+
+    combat_by_mode: dict[str, dict[str, int | float]] = {}
+    for mode in sorted(modes):
+        matching = [result for result in results if result["mode"] == mode]
+        mode_shots = sum(result["shots_fired"] for result in matching)
+        mode_hits = sum(result["shots_hit"] for result in matching)
+        combat_by_mode[mode] = {
+            "shots_fired": mode_shots,
+            "shots_hit": mode_hits,
+            "shot_hit_rate": mode_hits / mode_shots if mode_shots else 0.0,
+        }
+    total_shots = sum(result["shots_fired"] for result in results)
+    total_hits = sum(result["shots_hit"] for result in results)
+    combat_comparisons = [
+        comparison
+        for comparison in comparisons
+        if comparison["combat_event_applicable"]
+    ]
+    combat = {
+        "contract": COMBAT_CONTRACT,
+        "shots_fired": total_shots,
+        "shots_hit": total_hits,
+        "shot_hit_rate": total_hits / total_shots if total_shots else 0.0,
+        "by_mode": combat_by_mode,
+        "replay_event_matches": sum(
+            comparison["combat_event_match"]
+            for comparison in combat_comparisons
+        ),
+        "replay_event_comparisons": len(combat_comparisons),
+    }
 
     capture_on, capture_off = bot_frame_times_by_capture(results)
     performance = {
@@ -738,7 +996,7 @@ def build_report(
         for comparison in comparisons
     ]
     summary = {
-        "schema_version": 1,
+        "schema_version": 2,
         "episodes_root": str(episodes_root),
         "episode_count": len(results),
         "valid_episode_count": sum(not result["errors"] for result in results),
@@ -754,6 +1012,7 @@ def build_report(
         "seed_reproducibility": seed_reproducibility,
         "replay_comparisons": public_comparisons,
         "action_metrics": action_metrics,
+        "combat": combat,
         "performance": performance,
         "plots": plot_files,
         "episodes": public_results,
@@ -810,8 +1069,8 @@ def _write_markdown_summary(path: Path, summary: dict[str, Any]) -> None:
             "## Action distributions",
             "",
             "| Mode | Samples | Move mean | Move p95 | Look mean | Look p95 | "
-            "Jump rate | Collision rate |",
-            "|---|---:|---:|---:|---:|---:|---:|---:|",
+            "Jump rate | Fire rate | Collision rate |",
+            "|---|---:|---:|---:|---:|---:|---:|---:|---:|",
         ]
     )
     for mode, metrics in summary["action_metrics"].items():
@@ -821,7 +1080,33 @@ def _write_markdown_summary(path: Path, summary: dict[str, Any]) -> None:
             f"| {mode} | {move['count']} | {move['mean']:.3f} | "
             f"{move['p95']:.3f} | {look['mean']:.3f} | {look['p95']:.3f} | "
             f"{metrics['jump_rate'] * 100.0:.2f}% | "
+            f"{metrics['fire_rate'] * 100.0:.2f}% | "
             f"{metrics['collision_rate'] * 100.0:.2f}% |"
+        )
+
+    combat = summary["combat"]
+    lines.extend(
+        [
+            "",
+            "## One Bullet Outcome Ledger",
+            "",
+            f"- Contract: `{combat['contract']}`",
+            f"- Shots: {combat['shots_fired']}",
+            f"- Hits: {combat['shots_hit']}",
+            f"- Hit rate: {combat['shot_hit_rate'] * 100.0:.2f}%",
+            f"- Exact replay event matches: "
+            f"{combat['replay_event_matches']}/"
+            f"{combat['replay_event_comparisons']}",
+            "",
+            "| Mode | Shots | Hits | Hit rate |",
+            "|---|---:|---:|---:|",
+        ]
+    )
+    for mode, metrics in combat["by_mode"].items():
+        lines.append(
+            f"| {mode} | {metrics['shots_fired']} | "
+            f"{metrics['shots_hit']} | "
+            f"{metrics['shot_hit_rate'] * 100.0:.2f}% |"
         )
 
     lines.extend(
@@ -829,17 +1114,25 @@ def _write_markdown_summary(path: Path, summary: dict[str, Any]) -> None:
             "",
             "## JSON replay comparisons",
             "",
-            "| Replay | Frames | Mean cm | P95 cm | Final cm | Target |",
-            "|---|---:|---:|---:|---:|---|",
+            "| Replay | Frames | Mean cm | P95 cm | Final cm | Combat | Target |",
+            "|---|---:|---:|---:|---:|---|---|",
         ]
     )
     for comparison in summary["replay_comparisons"]:
+        combat_result = (
+            "pass"
+            if comparison["combat_event_match"]
+            else "fail"
+        )
+        if not comparison["combat_event_applicable"]:
+            combat_result = "n/a"
         lines.append(
             f"| {comparison['replayed_episode_id']} | "
             f"{comparison['shared_frames']} | "
             f"{comparison['mean_position_error_cm']:.3f} | "
             f"{comparison['p95_position_error_cm']:.3f} | "
             f"{comparison['final_position_error_cm']:.3f} | "
+            f"{combat_result} | "
             f"{'pass' if comparison['within_target'] else 'fail'} |"
         )
 

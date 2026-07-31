@@ -45,6 +45,49 @@ namespace
 
 		Object->SetStringField(FieldName, Value);
 	}
+
+	TSharedPtr<FJsonValue> CombatEventToJson(
+		const int32 Sequence,
+		const FString& Event,
+		const FSimTraceShotOutcome& Outcome)
+	{
+		const TSharedRef<FJsonObject> Object = MakeShared<FJsonObject>();
+		Object->SetNumberField(TEXT("sequence"), Sequence);
+		Object->SetStringField(TEXT("event"), Event);
+		Object->SetNumberField(TEXT("shot_id"), Outcome.ShotId);
+		return MakeShared<FJsonValueObject>(Object);
+	}
+
+	TArray<TSharedPtr<FJsonValue>> CombatEventsToJson(
+		const FSimTraceShotOutcome& Outcome)
+	{
+		TArray<TSharedPtr<FJsonValue>> Events;
+		if (!Outcome.bShotFired)
+		{
+			return Events;
+		}
+
+		Events.Add(CombatEventToJson(0, TEXT("fire"), Outcome));
+
+		TSharedPtr<FJsonValue> ShotValue = CombatEventToJson(1, TEXT("shot"), Outcome);
+		const TSharedPtr<FJsonObject> Shot = ShotValue->AsObject();
+		Shot->SetArrayField(TEXT("origin_cm"), VectorToJson(Outcome.Origin));
+		Shot->SetArrayField(TEXT("direction"), VectorToJson(Outcome.Direction));
+		Events.Add(ShotValue);
+
+		TSharedPtr<FJsonValue> OutcomeValue =
+			CombatEventToJson(2, Outcome.bHit ? TEXT("hit") : TEXT("miss"), Outcome);
+		const TSharedPtr<FJsonObject> OutcomeObject = OutcomeValue->AsObject();
+		SetOptionalString(OutcomeObject.ToSharedRef(), TEXT("target_id"), Outcome.TargetId);
+		OutcomeObject->SetArrayField(
+			TEXT("impact_position_cm"),
+			VectorToJson(Outcome.ImpactPosition));
+		OutcomeObject->SetNumberField(
+			TEXT("distance_cm"),
+			Outcome.DistanceCentimeters);
+		Events.Add(OutcomeValue);
+		return Events;
+	}
 }
 
 FString LexToString(const ESimTraceMode Mode)
@@ -133,7 +176,7 @@ FString FSimTraceTrajectorySample::ToJsonLine() const
 	const TSharedRef<FJsonObject> Object = MakeShared<FJsonObject>();
 	const double RoundedTimestamp = FMath::RoundToDouble(TimestampSeconds * 1000000.0) / 1000000.0;
 	const double RoundedDelta = FMath::RoundToDouble(DeltaSeconds * 1000000.0) / 1000000.0;
-	Object->SetNumberField(TEXT("schema_version"), 1);
+	Object->SetNumberField(TEXT("schema_version"), 2);
 	Object->SetNumberField(TEXT("sim_frame"), SimFrame);
 	Object->SetNumberField(TEXT("timestamp_s"), RoundedTimestamp);
 	Object->SetNumberField(TEXT("delta_s"), RoundedDelta);
@@ -144,6 +187,8 @@ FString FSimTraceTrajectorySample::ToJsonLine() const
 	Object->SetArrayField(TEXT("move_input"), Vector2DToJson(MoveInput));
 	Object->SetArrayField(TEXT("look_input"), Vector2DToJson(LookInput));
 	Object->SetBoolField(TEXT("jump_pressed"), bJumpPressed);
+	Object->SetBoolField(TEXT("fire_pressed"), bFirePressed);
+	Object->SetArrayField(TEXT("combat_events"), CombatEventsToJson(ShotOutcome));
 	Object->SetBoolField(TEXT("collision"), bCollision);
 	Object->SetBoolField(TEXT("captured"), bCaptured);
 	Object->SetBoolField(TEXT("capture_dropped"), bCaptureDropped);

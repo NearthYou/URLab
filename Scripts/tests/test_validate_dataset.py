@@ -11,7 +11,13 @@ from Scripts.validate_dataset import build_report, compare_episodes, validate_ep
 
 
 class DatasetFixture:
-    def __init__(self, root: Path, episode_id: str, mode: str = "bot") -> None:
+    def __init__(
+        self,
+        root: Path,
+        episode_id: str,
+        mode: str = "bot",
+        schema_version: int = 1,
+    ) -> None:
         self.path = root / episode_id
         (self.path / "rgb").mkdir(parents=True)
         (self.path / "depth").mkdir()
@@ -21,7 +27,7 @@ class DatasetFixture:
         for frame in range(4):
             captured = frame in {0, 3}
             row = {
-                "schema_version": 1,
+                "schema_version": schema_version,
                 "sim_frame": frame,
                 "timestamp_s": frame / 30,
                 "delta_s": 1 / 30,
@@ -41,6 +47,30 @@ class DatasetFixture:
                 "done": frame == 3,
                 "end_reason": "goal" if frame == 3 else "",
             }
+            if schema_version == 2:
+                row["fire_pressed"] = frame == 2
+                row["combat_events"] = (
+                    [
+                        {"sequence": 0, "event": "fire", "shot_id": 0},
+                        {
+                            "sequence": 1,
+                            "event": "shot",
+                            "shot_id": 0,
+                            "origin_cm": [20.0, 0.0, 160.0],
+                            "direction": [1.0, 0.0, 0.0],
+                        },
+                        {
+                            "sequence": 2,
+                            "event": "hit",
+                            "shot_id": 0,
+                            "target_id": "target_alpha",
+                            "impact_position_cm": [2940.0, 0.0, 160.0],
+                            "distance_cm": 2920.0,
+                        },
+                    ]
+                    if frame == 2
+                    else []
+                )
             self.rows.append(row)
 
         with (self.path / "trajectory.jsonl").open("w", encoding="utf-8") as stream:
@@ -58,7 +88,7 @@ class DatasetFixture:
         replay_name = f"simtrace_{episode_id}"
         (self.path / "replay" / f"{replay_name}.replay").write_bytes(b"replay")
         manifest = {
-            "schema_version": 1,
+            "schema_version": schema_version,
             "episode_id": episode_id,
             "mode": mode,
             "seed": 1000,
@@ -94,6 +124,17 @@ class DatasetFixture:
             "replay_archive_path": f"replay/{replay_name}.replay",
             "complete": True,
         }
+        if schema_version == 2:
+            manifest.update(
+                {
+                    "target_position_cm": [2940.0, 0.0, 170.0],
+                    "combat_contract": "one_bullet_outcome_ledger_v1",
+                    "primary_target_id": "target_alpha",
+                    "shots_fired": 1,
+                    "shots_hit": 1,
+                    "shot_hit_rate": 1.0,
+                }
+            )
         (self.path / "manifest.json").write_text(
             json.dumps(manifest), encoding="utf-8"
         )
@@ -123,6 +164,56 @@ class ValidateDatasetTest(unittest.TestCase):
             self.assertEqual([], result["errors"])
             self.assertEqual(4, result["trajectory_frames"])
             self.assertEqual(2, result["capture_frames"])
+
+    def test_schema_two_combat_ledger_passes(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            fixture = DatasetFixture(
+                Path(directory), "episode_combat", schema_version=2
+            )
+
+            result = validate_episode(fixture.path)
+
+            self.assertEqual([], result["errors"])
+            self.assertEqual(1, result["shots_fired"])
+            self.assertEqual(1, result["shots_hit"])
+            self.assertEqual(1.0, result["shot_hit_rate"])
+
+    def test_combat_ledger_rejects_broken_event_order(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            fixture = DatasetFixture(
+                Path(directory), "episode_broken_ledger", schema_version=2
+            )
+            events = fixture.rows[2]["combat_events"]
+            events[0], events[1] = events[1], events[0]
+            (fixture.path / "trajectory.jsonl").write_text(
+                "".join(json.dumps(row) + "\n" for row in fixture.rows),
+                encoding="utf-8",
+            )
+
+            result = validate_episode(fixture.path)
+
+            self.assertTrue(
+                any("combat event order" in error for error in result["errors"])
+            )
+
+    def test_combat_ledger_rejects_non_string_event_without_crashing(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            fixture = DatasetFixture(
+                Path(directory), "episode_bad_event_type", schema_version=2
+            )
+            fixture.rows[2]["combat_events"][2]["event"] = ["hit"]
+            (fixture.path / "trajectory.jsonl").write_text(
+                "".join(json.dumps(row) + "\n" for row in fixture.rows),
+                encoding="utf-8",
+            )
+
+            result = validate_episode(fixture.path)
+
+            self.assertTrue(
+                any("combat event order" in error for error in result["errors"])
+            )
 
     def test_missing_depth_is_reported(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
@@ -175,7 +266,46 @@ class ValidateDatasetTest(unittest.TestCase):
             self.assertEqual(0.0, metrics["final_position_error_cm"])
             self.assertTrue(metrics["parent_episode_match"])
             self.assertTrue(metrics["frame_alignment_match"])
+            self.assertFalse(metrics["combat_event_applicable"])
             self.assertTrue(metrics["within_target"])
+
+    def test_replay_requires_exact_combat_outcome(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            original = DatasetFixture(
+                root, "episode_original_combat", schema_version=2
+            )
+            replayed = DatasetFixture(
+                root,
+                "episode_replayed_combat",
+                mode="input-replay",
+                schema_version=2,
+            )
+            replayed.update_manifest(parent_episode_id="episode_original_combat")
+            replayed.rows[2]["combat_events"][2]["target_id"] = "target_bravo"
+            (replayed.path / "trajectory.jsonl").write_text(
+                "".join(json.dumps(row) + "\n" for row in replayed.rows),
+                encoding="utf-8",
+            )
+
+            metrics = compare_episodes(original.path, replayed.path)
+
+            self.assertFalse(metrics["combat_event_match"])
+            self.assertEqual([2], metrics["combat_mismatch_frames"])
+            self.assertFalse(metrics["within_target"])
+
+    def test_report_includes_combat_summary_and_plot(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            DatasetFixture(root, "episode_combat", schema_version=2)
+
+            summary = build_report(root, root / "reports")
+
+            self.assertEqual(1, summary["combat"]["shots_fired"])
+            self.assertEqual(1, summary["combat"]["shots_hit"])
+            self.assertEqual(1.0, summary["combat"]["shot_hit_rate"])
+            self.assertIn("combat_ledger.png", summary["plots"])
+            self.assertTrue((root / "reports" / "combat_ledger.png").is_file())
 
     def test_replay_with_wrong_parent_fails_target(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
@@ -202,6 +332,36 @@ class ValidateDatasetTest(unittest.TestCase):
             metrics = compare_episodes(original.path, replayed.path)
 
             self.assertFalse(metrics["frame_alignment_match"])
+            self.assertFalse(metrics["within_target"])
+
+    def test_replay_missing_shot_frame_fails_exact_combat_match(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            original = DatasetFixture(
+                root, "episode_original_combat", schema_version=2
+            )
+            replayed = DatasetFixture(
+                root,
+                "episode_replayed_combat",
+                mode="input-replay",
+                schema_version=2,
+            )
+            replayed.update_manifest(
+                parent_episode_id="episode_original_combat"
+            )
+            without_shot = [
+                row for row in replayed.rows if row["sim_frame"] != 2
+            ]
+            (replayed.path / "trajectory.jsonl").write_text(
+                "".join(json.dumps(row) + "\n" for row in without_shot),
+                encoding="utf-8",
+            )
+
+            metrics = compare_episodes(original.path, replayed.path)
+
+            self.assertTrue(metrics["combat_event_applicable"])
+            self.assertFalse(metrics["combat_event_match"])
+            self.assertEqual([2], metrics["combat_mismatch_frames"])
             self.assertFalse(metrics["within_target"])
 
     def test_unavailable_git_revision_is_reported(self) -> None:

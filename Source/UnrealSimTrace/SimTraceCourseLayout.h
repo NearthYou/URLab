@@ -14,6 +14,7 @@ struct UNREALSIMTRACE_API FSimTraceCourseLayout
 	int32 Seed = 0;
 	FTransform StartTransform = FTransform::Identity;
 	FTransform GoalTransform = FTransform::Identity;
+	FTransform TargetTransform = FTransform::Identity;
 	TArray<FSimTraceCourseElement> Elements;
 	TArray<FVector> Waypoints;
 	FString CourseHash;
@@ -21,4 +22,3 @@ struct UNREALSIMTRACE_API FSimTraceCourseLayout
 
 	static FSimTraceCourseLayout Generate(int32 InSeed);
 };
-
