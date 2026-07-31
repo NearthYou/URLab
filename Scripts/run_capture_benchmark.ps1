@@ -23,6 +23,7 @@ $benchmarkId = "capture_" + [DateTime]::UtcNow.ToString("yyyyMMddTHHmmssfffZ")
 $outputDirectory = Join-Path $benchmarkRoot $benchmarkId
 $partialPath = Join-Path $outputDirectory "design.partial.json"
 $finalPath = Join-Path $outputDirectory "design.json"
+$script:utf8NoBom = New-Object System.Text.UTF8Encoding($false)
 
 New-Item -ItemType Directory -Path $episodesRoot -Force | Out-Null
 New-Item -ItemType Directory -Path $outputDirectory -Force | Out-Null
@@ -34,6 +35,20 @@ function Get-EpisodeDirectoryNames {
     return @(
         Get-ChildItem -LiteralPath $episodesRoot -Directory |
             Select-Object -ExpandProperty Name
+    )
+}
+
+function Write-DesignJson {
+    param(
+        [Parameter(Mandatory = $true)][object]$Value,
+        [Parameter(Mandatory = $true)][string]$Path
+    )
+
+    $json = $Value | ConvertTo-Json -Depth 8
+    [System.IO.File]::WriteAllText(
+        $Path,
+        $json + [Environment]::NewLine,
+        $script:utf8NoBom
     )
 }
 
@@ -134,12 +149,12 @@ for ($index = 0; $index -lt $PairCount; $index++) {
         capture_off_episode_id = $episodes.capture_off
         capture_on_episode_id = $episodes.capture_on
     }
-    $design | ConvertTo-Json -Depth 8 | Set-Content -LiteralPath $partialPath -Encoding utf8
+    Write-DesignJson -Value $design -Path $partialPath
 }
 
 $design.complete = $true
 $design.completed_utc = [DateTime]::UtcNow.ToString("o")
-$design | ConvertTo-Json -Depth 8 | Set-Content -LiteralPath $partialPath -Encoding utf8
+Write-DesignJson -Value $design -Path $partialPath
 Move-Item -LiteralPath $partialPath -Destination $finalPath
 
 uv run python (Join-Path $PSScriptRoot "validate_dataset.py") report $episodesRoot

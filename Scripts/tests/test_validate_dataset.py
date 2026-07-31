@@ -572,7 +572,7 @@ class ValidateDatasetTest(unittest.TestCase):
                         ],
                     }
                 ),
-                encoding="utf-8",
+                encoding="utf-8-sig",
             )
 
             summary = build_report(episodes, root / "reports")

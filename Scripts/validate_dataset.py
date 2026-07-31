@@ -39,7 +39,7 @@ COMBAT_CONTRACT = "one_bullet_outcome_ledger_v1"
 
 
 def _load_json(path: Path) -> dict[str, Any]:
-    with path.open("r", encoding="utf-8") as stream:
+    with path.open("r", encoding="utf-8-sig") as stream:
         value = json.load(stream)
     if not isinstance(value, dict):
         raise ValueError(f"{path} must contain a JSON object")
