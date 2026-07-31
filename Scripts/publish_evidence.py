@@ -435,6 +435,7 @@ def _write_evidence_readme(
     evidence: dict[str, Any],
     *,
     has_video: bool,
+    has_ml_manifest: bool,
 ) -> None:
     summary = evidence["summary"]
     modes = summary.get("modes", {})
@@ -479,6 +480,19 @@ def _write_evidence_readme(
         "- [Replay error plot](reports/replay_error.png)",
         "- [Capture performance plot](reports/capture_performance.png)",
     ]
+    if has_ml_manifest:
+        lines.extend(
+            [
+                "",
+                "## ML consumption contract",
+                "",
+                "- [ML dataset manifest](ml_dataset_manifest.json)",
+                "",
+                "Only the validated counts, feature schema, causal alignment, "
+                "and seed-level split contract are published. Raw episodes and "
+                "generated training indexes remain under `Saved/SimTrace`.",
+            ]
+        )
     if has_video:
         lines.extend(
             [
@@ -509,6 +523,43 @@ def _write_evidence_readme(
     (output_root / "README.md").write_text(
         "\n".join(lines), encoding="utf-8"
     )
+
+
+def _publish_ml_dataset_manifest(
+    episodes_root: Path, output_root: Path
+) -> dict[str, Any] | None:
+    source_path = episodes_root.parent / "ml_dataset" / "dataset.json"
+    if not source_path.is_file():
+        return None
+    source = _load_json(source_path)
+    if source.get("complete") is not True:
+        raise ValueError(f"ML dataset manifest is incomplete: {source_path}")
+    for field in (
+        "episode_count",
+        "transition_count",
+        "sensor_policy_sample_count",
+    ):
+        value = source.get(field)
+        if isinstance(value, bool) or not isinstance(value, int) or value < 0:
+            raise ValueError(f"ML dataset manifest has invalid {field}")
+
+    public = {
+        key: value
+        for key, value in source.items()
+        if key not in {"source_episodes_root", "files"}
+    }
+    public.update(
+        {
+            "raw_episode_data_published": False,
+            "training_indexes_published": False,
+            "source_manifest_sha256": _sha256(source_path),
+        }
+    )
+    (output_root / "ml_dataset_manifest.json").write_text(
+        json.dumps(public, indent=2, ensure_ascii=False) + "\n",
+        encoding="utf-8",
+    )
+    return public
 
 
 def _build_evidence_bundle(
@@ -650,8 +701,20 @@ def _build_evidence_bundle(
             evidence["git_revision"],
         )
 
+    ml_manifest = _publish_ml_dataset_manifest(episodes_root, output_root)
+    if ml_manifest is not None:
+        evidence["ml_dataset"] = {
+            "episode_count": ml_manifest["episode_count"],
+            "transition_count": ml_manifest["transition_count"],
+            "sensor_policy_sample_count": ml_manifest[
+                "sensor_policy_sample_count"
+            ],
+        }
     _write_evidence_readme(
-        output_root, evidence, has_video=(output_root / VIDEO_NAME).is_file()
+        output_root,
+        evidence,
+        has_video=(output_root / VIDEO_NAME).is_file(),
+        has_ml_manifest=ml_manifest is not None,
     )
     artifact_files = sorted(
         path

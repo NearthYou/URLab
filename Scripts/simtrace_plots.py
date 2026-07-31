@@ -17,13 +17,17 @@ def bot_frame_times_by_capture(
     capture_on = [
         value
         for result in results
-        if result["mode"] == "bot" and result.get("_capture_hz", 0) > 0
+        if result["mode"] == "bot"
+        and not result.get("errors")
+        and result.get("_capture_hz", 0) > 0
         for value in result["_frame_times_ms"]
     ]
     capture_off = [
         value
         for result in results
-        if result["mode"] == "bot" and result.get("_capture_hz", 0) == 0
+        if result["mode"] == "bot"
+        and not result.get("errors")
+        and result.get("_capture_hz", 0) == 0
         for value in result["_frame_times_ms"]
     ]
     return capture_on, capture_off
@@ -33,6 +37,7 @@ def write_plots(
     output: Path,
     results: list[dict[str, Any]],
     comparisons: list[dict[str, Any]],
+    performance: dict[str, Any],
 ) -> list[str]:
     plot_paths: list[str] = []
     episode_labels = [
@@ -149,20 +154,33 @@ def write_plots(
     plt.close()
     plot_paths.append(path.name)
 
-    capture_on, capture_off = bot_frame_times_by_capture(results)
     plt.figure(figsize=(7, 4.5))
-    data: list[list[float]] = []
-    labels: list[str] = []
-    if capture_off:
-        data.append(capture_off)
-        labels.append("capture off")
-    if capture_on:
-        data.append(capture_on)
-        labels.append("capture on")
-    if data:
-        plt.boxplot(data, tick_labels=labels, showfliers=False)
-    plt.ylabel("Frame time ms")
-    plt.title("Bot capture performance")
+    pairs = performance.get("paired_by_seed", {}).get("pairs", [])
+    if pairs:
+        labels = [f"seed {pair['seed']}" for pair in pairs]
+        deltas = [float(pair["delta_ms"]) for pair in pairs]
+        colors = ["#e76f51" if delta > 0 else "#277da1" for delta in deltas]
+        plt.bar(range(len(pairs)), deltas, color=colors)
+        plt.xticks(
+            range(len(pairs)), labels, rotation=55, ha="right", fontsize=7
+        )
+        plt.axhline(0.0, color="#222222", linewidth=0.8)
+        plt.ylabel("Median frame-time delta ms (on - off)")
+        plt.title("Paired capture cost by course seed")
+    else:
+        capture_on, capture_off = bot_frame_times_by_capture(results)
+        data: list[list[float]] = []
+        labels = []
+        if capture_off:
+            data.append(capture_off)
+            labels.append("capture off")
+        if capture_on:
+            data.append(capture_on)
+            labels.append("capture on")
+        if data:
+            plt.boxplot(data, tick_labels=labels, showfliers=False)
+        plt.ylabel("Frame time ms")
+        plt.title("Unpaired capture frame-time diagnostic")
     plt.tight_layout()
     path = output / "capture_performance.png"
     plt.savefig(path, dpi=150)

@@ -7,7 +7,12 @@ from pathlib import Path
 
 from PIL import Image
 
-from Scripts.validate_dataset import build_report, compare_episodes, validate_episode
+from Scripts.validate_dataset import (
+    build_report,
+    compare_episodes,
+    paired_capture_performance,
+    validate_episode,
+)
 
 
 class DatasetFixture:
@@ -135,25 +140,58 @@ class DatasetFixture:
                     "shot_hit_rate": 1.0,
                 }
             )
-        (self.path / "manifest.json").write_text(
-            json.dumps(manifest), encoding="utf-8"
-        )
+        self._write_manifest_with_consistent_total_bytes(manifest)
+
+    def _write_manifest_with_consistent_total_bytes(
+        self, manifest: dict[str, object]
+    ) -> None:
+        manifest_path = self.path / "manifest.json"
         for _ in range(4):
+            manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
             total_bytes = sum(
-                path.stat().st_size for path in self.path.rglob("*") if path.is_file()
+                path.stat().st_size
+                for path in self.path.rglob("*")
+                if path.is_file()
             )
-            if manifest["total_bytes"] == total_bytes:
+            if manifest.get("total_bytes") == total_bytes:
                 break
             manifest["total_bytes"] = total_bytes
-            (self.path / "manifest.json").write_text(
-                json.dumps(manifest), encoding="utf-8"
-            )
+        manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
 
     def update_manifest(self, **fields: object) -> None:
         manifest_path = self.path / "manifest.json"
         manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
         manifest.update(fields)
         manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
+
+    def update_valid_manifest(self, **fields: object) -> None:
+        manifest_path = self.path / "manifest.json"
+        manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+        manifest.update(fields)
+        self._write_manifest_with_consistent_total_bytes(manifest)
+
+    def disable_capture(self) -> None:
+        for row in self.rows:
+            row["captured"] = False
+            row["capture_dropped"] = False
+            row["rgb_path"] = None
+            row["depth_path"] = None
+        (self.path / "trajectory.jsonl").write_text(
+            "".join(json.dumps(row) + "\n" for row in self.rows),
+            encoding="utf-8",
+        )
+        image_paths = (
+            *self.path.joinpath("rgb").glob("*.png"),
+            *self.path.joinpath("depth").glob("*.png"),
+        )
+        for image_path in image_paths:
+            image_path.unlink()
+        self.update_valid_manifest(
+            capture_hz=0,
+            capture_frames=0,
+            capture_dropped=0,
+            file_count=3,
+        )
 
 
 class ValidateDatasetTest(unittest.TestCase):
@@ -266,8 +304,67 @@ class ValidateDatasetTest(unittest.TestCase):
             self.assertEqual(0.0, metrics["final_position_error_cm"])
             self.assertTrue(metrics["parent_episode_match"])
             self.assertTrue(metrics["frame_alignment_match"])
+            self.assertTrue(metrics["exact_path_match"])
+            self.assertTrue(metrics["engine_version_match"])
+            self.assertTrue(metrics["git_revision_match"])
+            self.assertIsNone(metrics["host_fingerprint_match"])
             self.assertFalse(metrics["combat_event_applicable"])
             self.assertTrue(metrics["within_target"])
+
+    def test_replay_position_perturbation_is_detected(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            original = DatasetFixture(root, "episode_original")
+            replayed = DatasetFixture(root, "episode_replayed", mode="input-replay")
+            replayed.update_valid_manifest(parent_episode_id="episode_original")
+            replayed.rows[1]["position_cm"][0] += 1.0
+            (replayed.path / "trajectory.jsonl").write_text(
+                "".join(json.dumps(row) + "\n" for row in replayed.rows),
+                encoding="utf-8",
+            )
+
+            metrics = compare_episodes(original.path, replayed.path)
+
+            self.assertFalse(metrics["exact_path_match"])
+            self.assertGreater(metrics["max_position_error_cm"], 0.0)
+
+    def test_replay_comparison_records_build_mismatch(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            original = DatasetFixture(root, "episode_original")
+            replayed = DatasetFixture(root, "episode_replayed", mode="input-replay")
+            replayed.update_valid_manifest(
+                parent_episode_id="episode_original",
+                git_revision="abcdef012345",
+            )
+
+            metrics = compare_episodes(original.path, replayed.path)
+
+            self.assertTrue(metrics["engine_version_match"])
+            self.assertFalse(metrics["git_revision_match"])
+            self.assertEqual("0123456789ab", metrics["original_git_revision"])
+            self.assertEqual("abcdef012345", metrics["replayed_git_revision"])
+
+    def test_report_scopes_exact_replay_evidence(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            DatasetFixture(root, "episode_original")
+            replayed = DatasetFixture(root, "episode_replayed", mode="input-replay")
+            replayed.update_valid_manifest(parent_episode_id="episode_original")
+
+            summary = build_report(root, root / "reports")
+
+            evidence = summary["replay_evidence"]
+            self.assertEqual(1, evidence["comparison_count"])
+            self.assertEqual(1, evidence["exact_path_match_count"])
+            self.assertEqual(1, evidence["same_engine_version_count"])
+            self.assertEqual(1, evidence["same_git_revision_count"])
+            self.assertEqual(0, evidence["host_identity_recorded_count"])
+            self.assertEqual("not_tested", evidence["cross_host_status"])
+            markdown = (root / "reports" / "summary.md").read_text(
+                encoding="utf-8"
+            )
+            self.assertIn("does not claim cross-host determinism", markdown)
 
     def test_replay_requires_exact_combat_outcome(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
@@ -426,14 +523,179 @@ class ValidateDatasetTest(unittest.TestCase):
             root = Path(directory)
             DatasetFixture(root, "episode_capture_on")
             capture_off = DatasetFixture(root, "episode_capture_off")
-            capture_off.update_manifest(capture_hz=0)
+            capture_off.disable_capture()
             replay = DatasetFixture(root, "episode_replay", mode="input-replay")
-            replay.update_manifest(capture_hz=0)
+            replay.disable_capture()
 
             summary = build_report(root, root / "reports")
 
-            self.assertEqual(4, summary["performance"]["capture_on_ms"]["count"])
-            self.assertEqual(4, summary["performance"]["capture_off_ms"]["count"])
+            pooled = summary["performance"]["pooled_frame_samples"]
+            self.assertEqual(4, pooled["capture_on_ms"]["count"])
+            self.assertEqual(4, pooled["capture_off_ms"]["count"])
+            self.assertEqual(1, summary["performance"]["paired_by_seed"]["pair_count"])
+            self.assertEqual(
+                "historical_seed_pairs",
+                summary["performance"]["primary_source"],
+            )
+
+    def test_registered_alternating_benchmark_is_primary_performance_evidence(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            episodes = root / "episodes"
+            capture_on = DatasetFixture(episodes, "episode_on")
+            capture_off = DatasetFixture(episodes, "episode_off")
+            capture_off.disable_capture()
+            unregistered_on = DatasetFixture(episodes, "unregistered_on")
+            unregistered_on.update_valid_manifest(seed=2000)
+            unregistered_off = DatasetFixture(episodes, "unregistered_off")
+            unregistered_off.disable_capture()
+            unregistered_off.update_valid_manifest(seed=2000)
+
+            design_directory = root / "benchmarks" / "capture_test"
+            design_directory.mkdir(parents=True)
+            (design_directory / "design.json").write_text(
+                json.dumps(
+                    {
+                        "schema_version": 1,
+                        "benchmark_id": "capture_test",
+                        "method": "paired capture on/off episode medians by course seed",
+                        "condition_order": "alternating",
+                        "pair_count": 1,
+                        "complete": True,
+                        "pairs": [
+                            {
+                                "seed": 1000,
+                                "order": ["capture_off", "capture_on"],
+                                "capture_off_episode_id": capture_off.path.name,
+                                "capture_on_episode_id": capture_on.path.name,
+                            }
+                        ],
+                    }
+                ),
+                encoding="utf-8",
+            )
+
+            summary = build_report(episodes, root / "reports")
+
+            performance = summary["performance"]
+            self.assertEqual(
+                "registered_alternating_benchmark",
+                performance["primary_source"],
+            )
+            self.assertEqual(1, performance["registered_benchmark"]["design_count"])
+            self.assertEqual(1, performance["paired_by_seed"]["pair_count"])
+            self.assertEqual(2, performance["historical_seed_pairs"]["pair_count"])
+            self.assertEqual([], performance["registered_benchmark"]["design_errors"])
+
+    def test_registered_benchmark_rejects_non_alternating_pair_order(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            episodes = root / "episodes"
+            capture_on = DatasetFixture(episodes, "episode_on")
+            capture_off = DatasetFixture(episodes, "episode_off")
+            capture_off.disable_capture()
+            design_directory = root / "benchmarks" / "capture_test"
+            design_directory.mkdir(parents=True)
+            (design_directory / "design.json").write_text(
+                json.dumps(
+                    {
+                        "schema_version": 1,
+                        "benchmark_id": "capture_test",
+                        "condition_order": "alternating",
+                        "pair_count": 1,
+                        "complete": True,
+                        "pairs": [
+                            {
+                                "seed": 1000,
+                                "order": ["capture_on", "capture_off"],
+                                "capture_off_episode_id": capture_off.path.name,
+                                "capture_on_episode_id": capture_on.path.name,
+                            }
+                        ],
+                    }
+                ),
+                encoding="utf-8",
+            )
+
+            summary = build_report(episodes, root / "reports")
+
+            registered = summary["performance"]["registered_benchmark"]
+            self.assertEqual(0, registered["pair_count"])
+            self.assertTrue(
+                any("pair 0 order" in error for error in registered["design_errors"])
+            )
+            self.assertEqual(
+                "historical_seed_pairs",
+                summary["performance"]["primary_source"],
+            )
+
+    def test_paired_performance_compares_episode_medians_by_seed(self) -> None:
+        results: list[dict[str, object]] = []
+        for seed in range(1000, 1005):
+            results.extend(
+                [
+                    {
+                        "episode_id": f"off_{seed}",
+                        "mode": "bot",
+                        "seed": seed,
+                        "errors": [],
+                        "_capture_hz": 0.0,
+                        "_frame_times_ms": [30.0, 31.0, 32.0],
+                    },
+                    {
+                        "episode_id": f"on_{seed}",
+                        "mode": "bot",
+                        "seed": seed,
+                        "errors": [],
+                        "_capture_hz": 10.0,
+                        "_frame_times_ms": [35.0, 36.0, 37.0],
+                    },
+                ]
+            )
+        results.append(
+            {
+                "episode_id": "unmatched",
+                "mode": "bot",
+                "seed": 9999,
+                "errors": [],
+                "_capture_hz": 10.0,
+                "_frame_times_ms": [100.0],
+            }
+        )
+
+        performance = paired_capture_performance(results)
+
+        self.assertEqual(5, performance["pair_count"])
+        self.assertEqual(5.0, performance["median_delta_ms"])
+        self.assertEqual("capture_overhead_detected", performance["interpretation"])
+        self.assertEqual([1000, 1001, 1002, 1003, 1004], [
+            pair["seed"] for pair in performance["pairs"]
+        ])
+
+    def test_paired_performance_rejects_invalid_and_unmatched_runs(self) -> None:
+        results = [
+            {
+                "episode_id": "off",
+                "mode": "bot",
+                "seed": 1000,
+                "errors": [],
+                "_capture_hz": 0.0,
+                "_frame_times_ms": [30.0],
+            },
+            {
+                "episode_id": "on_invalid",
+                "mode": "bot",
+                "seed": 1000,
+                "errors": ["broken"],
+                "_capture_hz": 10.0,
+                "_frame_times_ms": [40.0],
+            },
+        ]
+
+        performance = paired_capture_performance(results)
+
+        self.assertEqual(0, performance["pair_count"])
+        self.assertEqual("insufficient_pairs", performance["interpretation"])
 
     def test_report_keeps_invalid_manifest_as_validation_error(self) -> None:
         with tempfile.TemporaryDirectory() as directory:

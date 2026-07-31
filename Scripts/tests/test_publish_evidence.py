@@ -207,6 +207,35 @@ class PublishEvidenceTests(unittest.TestCase):
             end_reason="goal",
         )
         self._write_report()
+        ml_dataset = self.root / "ml_dataset"
+        ml_dataset.mkdir()
+        (ml_dataset / "dataset.json").write_text(
+            json.dumps(
+                {
+                    "schema_version": 1,
+                    "dataset_type": "simtrace_causal_transition_index",
+                    "source_episodes_root": "../episodes",
+                    "episode_count": 4,
+                    "transition_count": 8,
+                    "sensor_policy_sample_count": 4,
+                    "state_features": ["position_x_cm"],
+                    "action_features": ["move_right"],
+                    "split": {"unit": "seed"},
+                    "causal_alignment": {
+                        "same_frame_sensor_action_pairing": False
+                    },
+                    "sensor": {"depth_max_cm": 2000},
+                    "source_engine_versions": ["5.8.1-test"],
+                    "source_git_revisions": ["abc123def456"],
+                    "files": {
+                        "transitions": "transitions.jsonl",
+                        "sensor_policy": "sensor_policy.jsonl",
+                    },
+                    "complete": True,
+                }
+            ),
+            encoding="utf-8",
+        )
 
         evidence = publish_evidence(
             self.episodes_root,
@@ -231,6 +260,15 @@ class PublishEvidenceTests(unittest.TestCase):
         self.assertTrue(
             (self.output_root / "reports" / "summary.md").is_file()
         )
+        public_ml_manifest = json.loads(
+            (self.output_root / "ml_dataset_manifest.json").read_text(
+                encoding="utf-8"
+            )
+        )
+        self.assertNotIn("source_episodes_root", public_ml_manifest)
+        self.assertNotIn("files", public_ml_manifest)
+        self.assertFalse(public_ml_manifest["raw_episode_data_published"])
+        self.assertFalse(public_ml_manifest["training_indexes_published"])
         excerpt = (
             self.output_root / "sample" / "trajectory_excerpt.jsonl"
         ).read_text(encoding="utf-8")
@@ -243,6 +281,7 @@ class PublishEvidenceTests(unittest.TestCase):
         self.assertEqual(copied_manifest["episode_id"], selected.name)
         readme = (self.output_root / "README.md").read_text(encoding="utf-8")
         self.assertIn("1 human-play episode", readme)
+        self.assertIn("ML dataset manifest", readme)
         self.assertIn(
             "The compact sample uses a deterministic bot episode.",
             readme,
