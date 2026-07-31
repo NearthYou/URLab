@@ -6,6 +6,18 @@ Level, Blueprint, Input Action asset을 만들지 않고 `/Engine/Maps/Entry`에
 
 현재 구현은 Unreal Engine 5.8.1 Editor Development 환경을 대상으로 한다.
 
+## 프로젝트 요약
+
+| 항목 | 내용 |
+|---|---|
+| 개발 형태 | 개인 개발 |
+| 해결하려는 문제 | Unreal 플레이 결과만 남기면 연구자가 어떤 관측에서 어떤 행동이 나왔는지 재구성하기 어렵다 |
+| 핵심 선택 | 사람, 봇, JSON 재생을 같은 Enhanced Input 경로로 통과시키고 상태, 행동, 센서와 종료 이유를 같은 simulation frame에 기록 |
+| 결과물 | 수집기, 재생기, validator, 학습 표본 exporter와 공개 evidence bundle |
+| 검증 | 유효 episode 60 / 60, RGB와 Depth 1,886쌍, 누락과 drop 0건, 같은 engine과 revision에서 JSON 재생 7 / 7 exact |
+
+게임 화면을 녹화하는 것만으로는 AI 학습과 평가에 쓸 수 없다. 입력과 상태의 시간축이 어긋나거나 사람과 봇이 서로 다른 제어 코드를 사용하면 결과 차이가 환경 때문인지 행동 때문인지 설명하기 어렵다. 그래서 먼저 입력 경로와 데이터 계약을 하나로 고정하고, 그 계약을 재생과 validator가 다시 확인하도록 설계했다.
+
 ## 구현 상태
 
 아래 수치는 `Saved/SimTrace`의 실제 manifest와 trajectory를 validator가 다시 읽어 만든 결과다. 데이터는 여러 개발 revision에서 수집했으며, 최신 등록형 성능 벤치마크 20회와 공개 대표 sample은 `ad1c6bff321f`에서 실행했다.
