@@ -57,5 +57,5 @@ private:
 	bool bRecording = false;
 
 	bool WriteManifest(bool bComplete, ESimTraceEndReason EndReason);
-	void CountEpisodeFiles(int32& OutFileCount, int64& OutTotalBytes) const;
+	void CountEpisodePayloadFiles(int32& OutFileCount, int64& OutTotalBytes) const;
 };

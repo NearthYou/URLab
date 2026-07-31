@@ -7,8 +7,6 @@
 #include "Misc/EngineVersion.h"
 #include "Misc/FileHelper.h"
 #include "Misc/Paths.h"
-#include "Serialization/JsonSerializer.h"
-#include "Serialization/JsonWriter.h"
 #include "SimTraceCharacter.h"
 #include "SimTraceCourseActor.h"
 
@@ -218,9 +216,9 @@ bool UEpisodeRecorderComponent::WriteManifest(
 		return false;
 	}
 
-	int32 FileCount = 0;
-	int64 TotalBytes = 0;
-	CountEpisodeFiles(FileCount, TotalBytes);
+	int32 PayloadFileCount = 0;
+	int64 PayloadBytes = 0;
+	CountEpisodePayloadFiles(PayloadFileCount, PayloadBytes);
 
 	const FSimTraceCourseLayout& Layout = Course->GetLayout();
 	const TSharedRef<FJsonObject> Manifest = MakeShared<FJsonObject>();
@@ -251,8 +249,7 @@ bool UEpisodeRecorderComponent::WriteManifest(
 	Manifest->SetNumberField(TEXT("trajectory_frames"), SamplesWritten);
 	Manifest->SetNumberField(TEXT("capture_frames"), CapturesWritten);
 	Manifest->SetNumberField(TEXT("capture_dropped"), CapturesDropped);
-	Manifest->SetNumberField(TEXT("file_count"), FileCount);
-	Manifest->SetNumberField(TEXT("total_bytes"), static_cast<double>(TotalBytes));
+	Manifest->SetNumberField(TEXT("file_count"), PayloadFileCount + 1);
 	Manifest->SetStringField(TEXT("started_utc"), StartedUtc.ToIso8601());
 	Manifest->SetNumberField(
 		TEXT("duration_s"),
@@ -265,8 +262,13 @@ bool UEpisodeRecorderComponent::WriteManifest(
 	Manifest->SetBoolField(TEXT("complete"), bComplete);
 
 	FString Json;
-	const TSharedRef<TJsonWriter<>> Writer = TJsonWriterFactory<>::Create(&Json);
-	FJsonSerializer::Serialize(Manifest, Writer);
+	if (!FSimTraceManifestAccounting::SerializeWithStableTotalBytes(
+			Manifest,
+			PayloadBytes,
+			Json))
+	{
+		return false;
+	}
 
 	const FString PartialPath = FPaths::Combine(EpisodeDirectory, TEXT("manifest.partial.json"));
 	if (!bComplete)
@@ -292,7 +294,9 @@ bool UEpisodeRecorderComponent::WriteManifest(
 	return bMoved;
 }
 
-void UEpisodeRecorderComponent::CountEpisodeFiles(int32& OutFileCount, int64& OutTotalBytes) const
+void UEpisodeRecorderComponent::CountEpisodePayloadFiles(
+	int32& OutFileCount,
+	int64& OutTotalBytes) const
 {
 	OutFileCount = 0;
 	OutTotalBytes = 0;
@@ -302,6 +306,13 @@ void UEpisodeRecorderComponent::CountEpisodeFiles(int32& OutFileCount, int64& Ou
 		{
 			if (!bIsDirectory)
 			{
+				const FString FileName = FPaths::GetCleanFilename(Path);
+				if (FileName == TEXT("manifest.json") ||
+					FileName == TEXT("manifest.partial.json") ||
+					FileName == TEXT("manifest.json.tmp"))
+				{
+					return true;
+				}
 				++OutFileCount;
 				OutTotalBytes += FMath::Max<int64>(0, IFileManager::Get().FileSize(Path));
 			}

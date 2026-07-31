@@ -7,11 +7,16 @@ import tempfile
 import unittest
 from datetime import UTC, datetime
 from pathlib import Path
+from unittest.mock import patch
 
 import numpy as np
 from PIL import Image
 
-from Scripts.publish_evidence import _stream_video_frames, publish_evidence
+from Scripts.publish_evidence import (
+    _create_video,
+    _stream_video_frames,
+    publish_evidence,
+)
 
 
 class PublishEvidenceTests(unittest.TestCase):
@@ -193,6 +198,13 @@ class PublishEvidenceTests(unittest.TestCase):
             capture_hz=0,
             end_reason="replay_source_end",
         )
+        self._write_episode(
+            "episode_human_s1000",
+            mode="human",
+            seed=1000,
+            capture_hz=10,
+            end_reason="goal",
+        )
         self._write_report()
 
         evidence = publish_evidence(
@@ -205,7 +217,7 @@ class PublishEvidenceTests(unittest.TestCase):
 
         self.assertEqual(evidence["source_episode_id"], selected.name)
         self.assertEqual(evidence["git_revision"], "abc123def456")
-        self.assertEqual(evidence["summary"]["valid_episode_count"], 3)
+        self.assertEqual(evidence["summary"]["valid_episode_count"], 4)
         self.assertTrue((self.output_root / "sample" / "manifest.json").is_file())
         self.assertTrue((self.output_root / "sample" / "rgb.png").is_file())
         self.assertTrue((self.output_root / "sample" / "depth.png").is_file())
@@ -228,6 +240,17 @@ class PublishEvidenceTests(unittest.TestCase):
             )
         )
         self.assertEqual(copied_manifest["episode_id"], selected.name)
+        readme = (self.output_root / "README.md").read_text(encoding="utf-8")
+        self.assertIn("1 human-play episode", readme)
+        self.assertIn(
+            "The compact sample uses a deterministic bot episode.",
+            readme,
+        )
+        self.assertNotIn("sample and evidence reel", readme)
+        self.assertNotIn(
+            "Human-play episodes are intentionally not represented",
+            readme,
+        )
         with Image.open(self.output_root / "sample" / "depth.png") as depth:
             self.assertIn(depth.mode, {"I;16", "I"})
         public_summary = json.loads(
@@ -287,6 +310,103 @@ class PublishEvidenceTests(unittest.TestCase):
                 self.output_root,
                 create_video=False,
             )
+
+    def test_rejects_stale_report_mode_counts(self) -> None:
+        self._write_episode(
+            "episode_bot_s1000",
+            mode="bot",
+            seed=1000,
+            capture_hz=10,
+            end_reason="goal",
+        )
+        self._write_episode(
+            "episode_human_s1000",
+            mode="human",
+            seed=1000,
+            capture_hz=10,
+            end_reason="goal",
+        )
+        self._write_report()
+        summary_path = self.reports_root / "summary.json"
+        summary = json.loads(summary_path.read_text(encoding="utf-8"))
+        summary["modes"] = {"bot": 2}
+        summary_path.write_text(json.dumps(summary), encoding="utf-8")
+
+        with self.assertRaisesRegex(
+            ValueError,
+            "report modes do not match episode tree",
+        ):
+            publish_evidence(
+                self.episodes_root,
+                self.reports_root,
+                self.output_root,
+                create_video=False,
+            )
+
+    def test_labels_report_without_human_episodes(self) -> None:
+        self._write_episode(
+            "episode_bot_s1000",
+            mode="bot",
+            seed=1000,
+            capture_hz=10,
+            end_reason="goal",
+        )
+        self._write_report()
+
+        publish_evidence(
+            self.episodes_root,
+            self.reports_root,
+            self.output_root,
+            create_video=False,
+        )
+
+        readme = (self.output_root / "README.md").read_text(encoding="utf-8")
+        self.assertIn(
+            "No human-play episodes are included in this report.",
+            readme,
+        )
+        self.assertNotIn("human-play episode, labeled by mode", readme)
+
+    @patch("Scripts.publish_evidence._probe_duration", return_value=60.0)
+    @patch("Scripts.publish_evidence._stream_video_frames")
+    @patch("Scripts.publish_evidence.subprocess.Popen")
+    @patch("Scripts.publish_evidence.shutil.which", return_value="ffmpeg")
+    @patch("Scripts.publish_evidence._write_slide")
+    def test_video_labels_source_revision_as_sample(
+        self,
+        write_slide,
+        _which,
+        _popen,
+        _stream_frames,
+        _probe_duration,
+    ) -> None:
+        episode = self._write_episode(
+            "episode_bot_s1000",
+            mode="bot",
+            seed=1000,
+            capture_hz=10,
+            end_reason="goal",
+        )
+        self._write_report()
+        summary = json.loads(
+            (self.reports_root / "summary.json").read_text(encoding="utf-8")
+        )
+        manifest = json.loads(
+            (episode / "manifest.json").read_text(encoding="utf-8")
+        )
+        self.output_root.mkdir()
+
+        _create_video(
+            [(episode, manifest)],
+            self.reports_root,
+            self.output_root,
+            summary,
+            manifest["git_revision"],
+        )
+
+        title_lines = write_slide.call_args_list[0].args[2]
+        self.assertIn("Sample revision: abc123def456", title_lines)
+        self.assertNotIn("Measured revision: abc123def456", title_lines)
 
     def test_refresh_replaces_stale_output(self) -> None:
         self._write_episode(

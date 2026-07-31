@@ -2,6 +2,8 @@
 
 #include "CoreMinimal.h"
 
+class FJsonObject;
+
 enum class ESimTraceMode : uint8
 {
 	Human,
@@ -24,6 +26,14 @@ enum class ESimTraceEndReason : uint8
 
 UNREALSIMTRACE_API FString LexToString(ESimTraceMode Mode);
 UNREALSIMTRACE_API FString LexToString(ESimTraceEndReason Reason);
+
+struct UNREALSIMTRACE_API FSimTraceManifestAccounting
+{
+	static bool SerializeWithStableTotalBytes(
+		const TSharedRef<FJsonObject>& Manifest,
+		int64 PayloadBytes,
+		FString& OutJson);
+};
 
 struct UNREALSIMTRACE_API FSimTraceActionState
 {
@@ -61,4 +71,3 @@ struct UNREALSIMTRACE_API FSimTraceTrajectorySample
 
 	FString ToJsonLine() const;
 };
-

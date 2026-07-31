@@ -87,6 +87,47 @@ FString LexToString(const ESimTraceEndReason Reason)
 	}
 }
 
+bool FSimTraceManifestAccounting::SerializeWithStableTotalBytes(
+	const TSharedRef<FJsonObject>& Manifest,
+	const int64 PayloadBytes,
+	FString& OutJson)
+{
+	if (PayloadBytes < 0)
+	{
+		return false;
+	}
+
+	int64 CandidateTotalBytes = PayloadBytes;
+	for (int32 Attempt = 0; Attempt < 8; ++Attempt)
+	{
+		Manifest->SetNumberField(
+			TEXT("total_bytes"),
+			static_cast<double>(CandidateTotalBytes));
+		OutJson.Reset();
+		const TSharedRef<TJsonWriter<>> Writer =
+			TJsonWriterFactory<>::Create(&OutJson);
+		if (!FJsonSerializer::Serialize(Manifest, Writer))
+		{
+			return false;
+		}
+
+		const int64 ManifestBytes = FTCHARToUTF8(*OutJson).Length();
+		if (PayloadBytes > MAX_int64 - ManifestBytes)
+		{
+			return false;
+		}
+
+		const int64 ActualTotalBytes = PayloadBytes + ManifestBytes;
+		if (ActualTotalBytes == CandidateTotalBytes)
+		{
+			return true;
+		}
+		CandidateTotalBytes = ActualTotalBytes;
+	}
+
+	return false;
+}
+
 FString FSimTraceTrajectorySample::ToJsonLine() const
 {
 	const TSharedRef<FJsonObject> Object = MakeShared<FJsonObject>();

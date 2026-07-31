@@ -1,5 +1,6 @@
 #if WITH_DEV_AUTOMATION_TESTS
 
+#include "Dom/JsonObject.h"
 #include "EnhancedActionKeyMapping.h"
 #include "InputCoreTypes.h"
 #include "InputMappingContext.h"
@@ -12,6 +13,7 @@
 #include "SimTraceTypes.h"
 #include "Serialization/JsonReader.h"
 #include "Serialization/JsonSerializer.h"
+#include "Serialization/JsonWriter.h"
 
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(
 	FSimTraceCourseDeterminismTest,
@@ -137,6 +139,47 @@ bool FSimTraceHumanLookMappingTest::RunTest(const FString& Parameters)
 	}
 
 	TestNotNull(TEXT("Mouse look negates only the vertical axis"), VerticalNegate);
+	return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+	FSimTraceManifestTotalBytesTest,
+	"SimTrace.Core.ManifestTotalBytes",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FSimTraceManifestTotalBytesTest::RunTest(const FString& Parameters)
+{
+	const TSharedRef<FJsonObject> Manifest = MakeShared<FJsonObject>();
+	Manifest->SetStringField(TEXT("episode_id"), TEXT("episode_boundary"));
+	Manifest->SetNumberField(TEXT("total_bytes"), 99999);
+
+	FString FiveDigitJson;
+	const TSharedRef<TJsonWriter<>> FiveDigitWriter =
+		TJsonWriterFactory<>::Create(&FiveDigitJson);
+	TestTrue(
+		TEXT("Five-digit manifest serializes"),
+		FJsonSerializer::Serialize(Manifest, FiveDigitWriter));
+
+	const int64 FiveDigitBytes = FTCHARToUTF8(*FiveDigitJson).Length();
+	const int64 PayloadBytes = 100000 - FiveDigitBytes;
+	FString StableJson;
+	TestTrue(
+		TEXT("Manifest total converges across a digit boundary"),
+		FSimTraceManifestAccounting::SerializeWithStableTotalBytes(
+			Manifest,
+			PayloadBytes,
+			StableJson));
+
+	const int64 StableJsonBytes = FTCHARToUTF8(*StableJson).Length();
+	const int64 RecordedTotalBytes =
+		static_cast<int64>(Manifest->GetNumberField(TEXT("total_bytes")));
+	TestEqual(
+		TEXT("Recorded total includes the final manifest byte size"),
+		RecordedTotalBytes,
+		PayloadBytes + StableJsonBytes);
+	TestTrue(
+		TEXT("Test crosses from five to six digits"),
+		RecordedTotalBytes >= 100000);
 	return true;
 }
 

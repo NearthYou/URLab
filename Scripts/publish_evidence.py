@@ -106,13 +106,20 @@ def _verify_report_matches_episodes(
     if summary.get("valid_episode_count") != len(actual):
         raise ValueError("not every episode in the report is valid")
 
+    actual_modes: dict[str, int] = {}
     for episode_id, manifest in actual.items():
+        mode = manifest.get("mode")
+        if not isinstance(mode, str):
+            raise ValueError(f"manifest has invalid mode: {episode_id}")
+        actual_modes[mode] = actual_modes.get(mode, 0) + 1
         report_row = reported[episode_id]
         for field in REPORT_IDENTITY_FIELDS:
             if report_row.get(field) != manifest.get(field):
                 raise ValueError(
                     f"report does not match {episode_id} field {field}"
                 )
+    if summary.get("modes") != actual_modes:
+        raise ValueError("report modes do not match episode tree")
 
 
 def _captured_goal_episodes(
@@ -291,7 +298,7 @@ def _create_video(
     reports_root: Path,
     output_root: Path,
     summary: dict[str, Any],
-    git_revision: str,
+    sample_git_revision: str,
 ) -> float | None:
     ffmpeg = shutil.which("ffmpeg")
     if not ffmpeg:
@@ -312,7 +319,7 @@ def _create_video(
             "Unreal SimTrace",
             [
                 "Runtime-generated AI data collection",
-                f"Measured revision: {git_revision[:12]}",
+                f"Sample revision: {sample_git_revision[:12]}",
                 "30 Hz state and action, 10 Hz RGB and depth",
             ],
         )
@@ -404,6 +411,10 @@ def _write_evidence_readme(
     has_video: bool,
 ) -> None:
     summary = evidence["summary"]
+    modes = summary.get("modes", {})
+    human_episode_count = (
+        int(modes.get("human", 0)) if isinstance(modes, dict) else 0
+    )
     lines = [
         "# Recorded evidence",
         "",
@@ -447,14 +458,22 @@ def _write_evidence_readme(
                 "The reel is generated only from recorded RGB frames and report artifacts.",
             ]
         )
-    lines.extend(
-        [
-            "",
-            "This automated evidence set contains bot, capture-baseline, and input-replay",
-            "episodes. Human-play episodes are intentionally not represented as automated data.",
-            "",
-        ]
-    )
+    lines.append("")
+    if has_video:
+        lines.append(
+            "The compact sample and evidence reel use deterministic bot episodes."
+        )
+    else:
+        lines.append("The compact sample uses a deterministic bot episode.")
+    if human_episode_count:
+        noun = "episode" if human_episode_count == 1 else "episodes"
+        lines.append(
+            "The validation report also includes "
+            f"{human_episode_count} human-play {noun}, labeled by mode."
+        )
+    else:
+        lines.append("No human-play episodes are included in this report.")
+    lines.append("")
     (output_root / "README.md").write_text(
         "\n".join(lines), encoding="utf-8"
     )
