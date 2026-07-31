@@ -114,8 +114,7 @@ class DatasetFixture:
             "depth_encoding": "uint16_linear_cm",
             "depth_max_cm": 2000,
             "depth_decode_cm": (
-                "value == 0 ? invalid : "
-                "min(value / 65535.0 * 2000.0, 2000.0)"
+                "value == 0 ? invalid : min(value / 65535.0 * 2000.0, 2000.0)"
             ),
             "trajectory_frames": 4,
             "capture_frames": 2,
@@ -149,9 +148,7 @@ class DatasetFixture:
         for _ in range(4):
             manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
             total_bytes = sum(
-                path.stat().st_size
-                for path in self.path.rglob("*")
-                if path.is_file()
+                path.stat().st_size for path in self.path.rglob("*") if path.is_file()
             )
             if manifest.get("total_bytes") == total_bytes:
                 break
@@ -361,17 +358,13 @@ class ValidateDatasetTest(unittest.TestCase):
             self.assertEqual(1, evidence["same_git_revision_count"])
             self.assertEqual(0, evidence["host_identity_recorded_count"])
             self.assertEqual("not_tested", evidence["cross_host_status"])
-            markdown = (root / "reports" / "summary.md").read_text(
-                encoding="utf-8"
-            )
+            markdown = (root / "reports" / "summary.md").read_text(encoding="utf-8")
             self.assertIn("does not claim cross-host determinism", markdown)
 
     def test_replay_requires_exact_combat_outcome(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
-            original = DatasetFixture(
-                root, "episode_original_combat", schema_version=2
-            )
+            original = DatasetFixture(root, "episode_original_combat", schema_version=2)
             replayed = DatasetFixture(
                 root,
                 "episode_replayed_combat",
@@ -434,21 +427,15 @@ class ValidateDatasetTest(unittest.TestCase):
     def test_replay_missing_shot_frame_fails_exact_combat_match(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
-            original = DatasetFixture(
-                root, "episode_original_combat", schema_version=2
-            )
+            original = DatasetFixture(root, "episode_original_combat", schema_version=2)
             replayed = DatasetFixture(
                 root,
                 "episode_replayed_combat",
                 mode="input-replay",
                 schema_version=2,
             )
-            replayed.update_manifest(
-                parent_episode_id="episode_original_combat"
-            )
-            without_shot = [
-                row for row in replayed.rows if row["sim_frame"] != 2
-            ]
+            replayed.update_manifest(parent_episode_id="episode_original_combat")
+            without_shot = [row for row in replayed.rows if row["sim_frame"] != 2]
             (replayed.path / "trajectory.jsonl").write_text(
                 "".join(json.dumps(row) + "\n" for row in without_shot),
                 encoding="utf-8",
@@ -538,13 +525,17 @@ class ValidateDatasetTest(unittest.TestCase):
                 summary["performance"]["primary_source"],
             )
 
-    def test_registered_alternating_benchmark_is_primary_performance_evidence(self) -> None:
+    def test_registered_alternating_benchmark_is_primary_performance_evidence(
+        self,
+    ) -> None:
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             episodes = root / "episodes"
             capture_on = DatasetFixture(episodes, "episode_on")
             capture_off = DatasetFixture(episodes, "episode_off")
             capture_off.disable_capture()
+            capture_off.update_valid_manifest(started_utc="2026-07-30T00:00:01.000Z")
+            capture_on.update_valid_manifest(started_utc="2026-07-30T00:00:02.000Z")
             unregistered_on = DatasetFixture(episodes, "unregistered_on")
             unregistered_on.update_valid_manifest(seed=2000)
             unregistered_off = DatasetFixture(episodes, "unregistered_off")
@@ -558,9 +549,14 @@ class ValidateDatasetTest(unittest.TestCase):
                     {
                         "schema_version": 1,
                         "benchmark_id": "capture_test",
-                        "method": "paired capture on/off episode medians by course seed",
+                        "method": (
+                            "paired capture on/off episode medians by course seed"
+                        ),
                         "condition_order": "alternating",
                         "pair_count": 1,
+                        "start_seed": 1000,
+                        "git_revision": "0123456789ab",
+                        "created_utc": "2026-07-30T00:00:00.000Z",
                         "complete": True,
                         "pairs": [
                             {
@@ -570,6 +566,7 @@ class ValidateDatasetTest(unittest.TestCase):
                                 "capture_on_episode_id": capture_on.path.name,
                             }
                         ],
+                        "completed_utc": "2026-07-30T00:00:03.000Z",
                     }
                 ),
                 encoding="utf-8-sig",
@@ -594,6 +591,8 @@ class ValidateDatasetTest(unittest.TestCase):
             capture_on = DatasetFixture(episodes, "episode_on")
             capture_off = DatasetFixture(episodes, "episode_off")
             capture_off.disable_capture()
+            capture_off.update_valid_manifest(started_utc="2026-07-30T00:00:01.000Z")
+            capture_on.update_valid_manifest(started_utc="2026-07-30T00:00:02.000Z")
             design_directory = root / "benchmarks" / "capture_test"
             design_directory.mkdir(parents=True)
             (design_directory / "design.json").write_text(
@@ -601,8 +600,14 @@ class ValidateDatasetTest(unittest.TestCase):
                     {
                         "schema_version": 1,
                         "benchmark_id": "capture_test",
+                        "method": (
+                            "paired capture on/off episode medians by course seed"
+                        ),
                         "condition_order": "alternating",
                         "pair_count": 1,
+                        "start_seed": 1000,
+                        "git_revision": "0123456789ab",
+                        "created_utc": "2026-07-30T00:00:00.000Z",
                         "complete": True,
                         "pairs": [
                             {
@@ -612,22 +617,125 @@ class ValidateDatasetTest(unittest.TestCase):
                                 "capture_on_episode_id": capture_on.path.name,
                             }
                         ],
+                        "completed_utc": "2026-07-30T00:00:03.000Z",
                     }
                 ),
                 encoding="utf-8",
             )
 
-            summary = build_report(episodes, root / "reports")
+            with self.assertRaisesRegex(
+                ValueError, "registered capture benchmark is invalid"
+            ):
+                build_report(episodes, root / "reports")
+            self.assertFalse((root / "reports" / "summary.json").exists())
 
-            registered = summary["performance"]["registered_benchmark"]
-            self.assertEqual(0, registered["pair_count"])
-            self.assertTrue(
-                any("pair 0 order" in error for error in registered["design_errors"])
+    def test_registered_benchmark_rejects_mixed_valid_and_invalid_pairs(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            episodes = root / "episodes"
+            off_1000 = DatasetFixture(episodes, "off_1000")
+            off_1000.disable_capture()
+            off_1000.update_valid_manifest(
+                seed=1000, started_utc="2026-07-30T00:00:01.000Z"
             )
-            self.assertEqual(
-                "historical_seed_pairs",
-                summary["performance"]["primary_source"],
+            on_1000 = DatasetFixture(episodes, "on_1000")
+            on_1000.update_valid_manifest(
+                seed=1000, started_utc="2026-07-30T00:00:02.000Z"
             )
+            off_1001 = DatasetFixture(episodes, "off_1001")
+            off_1001.disable_capture()
+            off_1001.update_valid_manifest(
+                seed=1001, started_utc="2026-07-30T00:00:04.000Z"
+            )
+            on_1001 = DatasetFixture(episodes, "on_1001")
+            on_1001.update_valid_manifest(
+                seed=1001, started_utc="2026-07-30T00:00:03.000Z"
+            )
+            design_directory = root / "benchmarks" / "capture_test"
+            design_directory.mkdir(parents=True)
+            design = {
+                "schema_version": 1,
+                "benchmark_id": "capture_test",
+                "method": "paired capture on/off episode medians by course seed",
+                "condition_order": "alternating",
+                "pair_count": 2,
+                "start_seed": 1000,
+                "git_revision": "0123456789ab",
+                "created_utc": "2026-07-30T00:00:00.000Z",
+                "complete": True,
+                "pairs": [
+                    {
+                        "seed": 1000,
+                        "order": ["capture_off", "capture_on"],
+                        "capture_off_episode_id": "off_1000",
+                        "capture_on_episode_id": "on_1000",
+                    },
+                    {
+                        "seed": 1001,
+                        "order": ["capture_off", "capture_on"],
+                        "capture_off_episode_id": "off_1001",
+                        "capture_on_episode_id": "on_1001",
+                    },
+                ],
+                "completed_utc": "2026-07-30T00:00:05.000Z",
+            }
+            (design_directory / "design.json").write_text(
+                json.dumps(design), encoding="utf-8"
+            )
+
+            with self.assertRaisesRegex(
+                ValueError, "registered capture benchmark is invalid"
+            ):
+                build_report(episodes, root / "reports")
+            self.assertFalse((root / "reports" / "summary.json").exists())
+
+    def test_registered_benchmark_rejects_schema_or_method_drift(self) -> None:
+        cases = {
+            "schema_version": 99,
+            "method": "unregistered benchmark method",
+        }
+        for field, value in cases.items():
+            with self.subTest(field=field), tempfile.TemporaryDirectory() as directory:
+                root = Path(directory)
+                episodes = root / "episodes"
+                capture_off = DatasetFixture(episodes, "episode_off")
+                capture_off.disable_capture()
+                capture_off.update_valid_manifest(
+                    started_utc="2026-07-30T00:00:01.000Z"
+                )
+                capture_on = DatasetFixture(episodes, "episode_on")
+                capture_on.update_valid_manifest(started_utc="2026-07-30T00:00:02.000Z")
+                design_directory = root / "benchmarks" / "capture_test"
+                design_directory.mkdir(parents=True)
+                design = {
+                    "schema_version": 1,
+                    "benchmark_id": "capture_test",
+                    "method": "paired capture on/off episode medians by course seed",
+                    "condition_order": "alternating",
+                    "pair_count": 1,
+                    "start_seed": 1000,
+                    "git_revision": "0123456789ab",
+                    "created_utc": "2026-07-30T00:00:00.000Z",
+                    "complete": True,
+                    "pairs": [
+                        {
+                            "seed": 1000,
+                            "order": ["capture_off", "capture_on"],
+                            "capture_off_episode_id": "episode_off",
+                            "capture_on_episode_id": "episode_on",
+                        }
+                    ],
+                    "completed_utc": "2026-07-30T00:00:03.000Z",
+                }
+                design[field] = value
+                (design_directory / "design.json").write_text(
+                    json.dumps(design), encoding="utf-8"
+                )
+
+                with self.assertRaisesRegex(
+                    ValueError, "registered capture benchmark is invalid"
+                ):
+                    build_report(episodes, root / "reports")
 
     def test_paired_performance_compares_episode_medians_by_seed(self) -> None:
         results: list[dict[str, object]] = []
@@ -668,9 +776,10 @@ class ValidateDatasetTest(unittest.TestCase):
         self.assertEqual(5, performance["pair_count"])
         self.assertEqual(5.0, performance["median_delta_ms"])
         self.assertEqual("capture_overhead_detected", performance["interpretation"])
-        self.assertEqual([1000, 1001, 1002, 1003, 1004], [
-            pair["seed"] for pair in performance["pairs"]
-        ])
+        self.assertEqual(
+            [1000, 1001, 1002, 1003, 1004],
+            [pair["seed"] for pair in performance["pairs"]],
+        )
 
     def test_paired_performance_rejects_invalid_and_unmatched_runs(self) -> None:
         results = [
@@ -696,6 +805,41 @@ class ValidateDatasetTest(unittest.TestCase):
 
         self.assertEqual(0, performance["pair_count"])
         self.assertEqual("insufficient_pairs", performance["interpretation"])
+
+    def test_paired_performance_detects_tail_cost_under_fixed_pacing(self) -> None:
+        results: list[dict[str, object]] = []
+        for seed in range(1000, 1005):
+            results.extend(
+                [
+                    {
+                        "episode_id": f"off_{seed}",
+                        "mode": "bot",
+                        "seed": seed,
+                        "errors": [],
+                        "_capture_hz": 0.0,
+                        "_frame_times_ms": [33.3] * 100,
+                    },
+                    {
+                        "episode_id": f"on_{seed}",
+                        "mode": "bot",
+                        "seed": seed,
+                        "errors": [],
+                        "_capture_hz": 10.0,
+                        "_frame_times_ms": [33.3] * 90 + [34.3] * 10,
+                    },
+                ]
+            )
+
+        performance = paired_capture_performance(results)
+
+        self.assertEqual(0.0, performance["median_delta_ms"])
+        self.assertEqual("inconclusive", performance["interpretation"])
+        self.assertEqual(1.0, performance["median_p95_delta_ms"])
+        self.assertEqual([1.0, 1.0], performance["bootstrap_ci95_p95_delta_ms"])
+        self.assertEqual(
+            "capture_tail_overhead_detected",
+            performance["tail_interpretation"],
+        )
 
     def test_report_keeps_invalid_manifest_as_validation_error(self) -> None:
         with tempfile.TemporaryDirectory() as directory:

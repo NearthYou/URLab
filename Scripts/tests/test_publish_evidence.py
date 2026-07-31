@@ -12,11 +12,18 @@ from unittest.mock import patch
 import numpy as np
 from PIL import Image
 
+from Scripts.export_ml_dataset import (
+    ACTION_FEATURES,
+    STATE_FEATURES,
+    _generation_sha256,
+    source_manifest_set_sha256,
+)
 from Scripts.publish_evidence import (
     _create_video,
     _stream_video_frames,
     publish_evidence,
 )
+from Scripts.validate_dataset import benchmark_registry_sha256
 
 
 class PublishEvidenceTests(unittest.TestCase):
@@ -55,12 +62,11 @@ class PublishEvidenceTests(unittest.TestCase):
             "trajectory_frames": 3,
             "end_reason": end_reason,
             "complete": True,
+            "engine_version": "5.8.1-test",
             "git_revision": "abc123def456",
             "course_hash": f"hash-{seed}",
         }
-        (episode / "manifest.json").write_text(
-            json.dumps(manifest), encoding="utf-8"
-        )
+        (episode / "manifest.json").write_text(json.dumps(manifest), encoding="utf-8")
         rows = [
             {
                 "sim_frame": 0,
@@ -94,10 +100,160 @@ class PublishEvidenceTests(unittest.TestCase):
                     episode / "rgb" / f"{frame:06d}.png"
                 )
                 depth = np.full((180, 320), 12000 + frame, dtype=np.uint16)
-                Image.fromarray(depth).save(
-                    episode / "depth" / f"{frame:06d}.png"
-                )
+                Image.fromarray(depth).save(episode / "depth" / f"{frame:06d}.png")
         return episode
+
+    def _write_ml_dataset(self) -> None:
+        output = self.root / "ml_dataset"
+        output.mkdir()
+        manifests = [
+            json.loads((episode / "manifest.json").read_text(encoding="utf-8"))
+            for episode in sorted(self.episodes_root.iterdir())
+        ]
+        included = [
+            manifest for manifest in manifests if manifest["mode"] in {"bot", "human"}
+        ]
+        transitions = []
+        seed_assignments: dict[str, str] = {}
+        for manifest in included:
+            seed_assignments[str(manifest["seed"])] = "train"
+            transitions.append(
+                {
+                    "schema_version": 1,
+                    "transition_id": f"{manifest['episode_id']}:000001",
+                    "split": "train",
+                    "episode_id": manifest["episode_id"],
+                    "mode": manifest["mode"],
+                    "seed": manifest["seed"],
+                    "course_hash": manifest["course_hash"],
+                    "observation_sim_frame": 0,
+                    "action_sim_frame": 1,
+                    "outcome_sim_frame": 1,
+                    "observation_state": [0.0] * len(STATE_FEATURES),
+                    "action": [0.0] * len(ACTION_FEATURES),
+                    "outcome_state": [0.0] * len(STATE_FEATURES),
+                    "rgb_path": f"{manifest['episode_id']}/rgb/000000.png",
+                    "depth_path": f"{manifest['episode_id']}/depth/000000.png",
+                    "collision": False,
+                    "combat_events": [],
+                    "done": False,
+                    "end_reason": "",
+                }
+            )
+        serialized = "".join(
+            json.dumps(record, separators=(",", ":")) + "\n" for record in transitions
+        )
+        transitions_path = output / "transitions.jsonl"
+        sensor_path = output / "sensor_policy.jsonl"
+        transitions_path.write_text(serialized, encoding="utf-8")
+        sensor_path.write_text(serialized, encoding="utf-8")
+        manifest = {
+            "schema_version": 1,
+            "dataset_type": "simtrace_causal_transition_index",
+            "source_episodes_root": "../episodes",
+            "source_episode_count": len(manifests),
+            "source_manifest_set_sha256": source_manifest_set_sha256(
+                self.episodes_root
+            ),
+            "episode_count": len(included),
+            "excluded_episode_count": len(manifests) - len(included),
+            "included_modes": ["bot", "human"],
+            "transition_count": len(transitions),
+            "sensor_policy_sample_count": len(transitions),
+            "state_features": list(STATE_FEATURES),
+            "action_features": list(ACTION_FEATURES),
+            "split": {
+                "unit": "seed",
+                "algorithm": "test seed split",
+                "split_seed": 17,
+                "seed_assignments": seed_assignments,
+                "episode_counts": {"train": len(included)},
+                "transition_counts": {"train": len(transitions)},
+                "sensor_policy_sample_counts": {"train": len(transitions)},
+            },
+            "causal_alignment": {
+                "observation": "PostPhysics state and sensor from frame t",
+                "action": "PrePhysics input applied at frame t+1",
+                "outcome": "PostPhysics state produced at frame t+1",
+                "same_frame_sensor_action_pairing": False,
+            },
+            "sensor": {
+                "rgb": "320x180 RGB uint8",
+                "depth": "320x180 uint16 linear centimeters",
+                "depth_max_cm": 2000,
+                "invalid_depth_value": 0,
+            },
+            "source_engine_versions": ["5.8.1-test"],
+            "source_git_revisions": ["abc123def456"],
+            "files": {
+                "transitions": "transitions.jsonl",
+                "sensor_policy": "sensor_policy.jsonl",
+            },
+            "file_integrity": {
+                "transitions": {
+                    "sha256": hashlib.sha256(transitions_path.read_bytes()).hexdigest(),
+                    "record_count": len(transitions),
+                },
+                "sensor_policy": {
+                    "sha256": hashlib.sha256(sensor_path.read_bytes()).hexdigest(),
+                    "record_count": len(transitions),
+                },
+            },
+            "complete": True,
+        }
+        manifest["generation_sha256"] = _generation_sha256(manifest)
+        (output / "dataset.json").write_text(json.dumps(manifest), encoding="utf-8")
+
+    @staticmethod
+    def _public_pubg_summary() -> dict[str, object]:
+        zero_hash = "0" * 64
+        return {
+            "schema_version": 1,
+            "dataset": "pubg_telemetry_aggregate",
+            "match": {
+                "platform": "steam",
+                "match_id_sha256": zero_hash,
+                "map_name": "Test_Main",
+                "team_size": 4,
+                "event_count": 0,
+                "first_event_utc": None,
+                "last_event_utc": None,
+            },
+            "event_type_counts": {},
+            "combat": {
+                "attacks": 0,
+                "damage_events": 0,
+                "knock_events": 0,
+                "kill_events": 0,
+                "attacks_with_damage": 0,
+                "attacks_with_knock": 0,
+                "attacks_with_kill": 0,
+                "unmatched_damage_attack_ids": 0,
+                "total_damage": 0,
+                "engagement_distance_raw": {
+                    "count": 0,
+                    "mean": 0,
+                    "p50": 0,
+                    "p95": 0,
+                },
+            },
+            "weapons": {},
+            "position_samples": 0,
+            "phase_changes": 0,
+            "provenance": {
+                "source": "PUBG Developer API telemetry",
+                "retrieved_utc": "2026-07-31T00:00:00Z",
+                "telemetry_host": "telemetry-cdn.pubg.com",
+                "source_url_sha256": zero_hash,
+                "match_id_sha256": zero_hash,
+                "raw_sha256": zero_hash,
+                "raw_data_publishable": False,
+                "contains_player_identifiers": False,
+                "telemetry_docs": "https://documentation.pubg.com/en/telemetry.html",
+                "event_docs": "https://documentation.pubg.com/en/telemetry-events.html",
+                "terms": "https://developer.pubg.com/tos?locale=en",
+            },
+        }
 
     def _write_report(self) -> None:
         episodes = []
@@ -156,6 +312,10 @@ class PublishEvidenceTests(unittest.TestCase):
                 "capture_on_ms": {"count": 10, "p50": 35.0},
                 "capture_off_ms": {"count": 10, "p50": 34.0},
                 "median_fps_drop_percent": 2.857,
+                "registered_benchmark": {
+                    "design_errors": [],
+                    "registry_sha256": benchmark_registry_sha256(self.episodes_root),
+                },
             },
             "plots": [
                 "episode_sizes.png",
@@ -173,9 +333,7 @@ class PublishEvidenceTests(unittest.TestCase):
             "# Test summary\n", encoding="utf-8"
         )
         for plot in summary["plots"]:
-            Image.new("RGB", (640, 360), (240, 240, 240)).save(
-                self.reports_root / plot
-            )
+            Image.new("RGB", (640, 360), (240, 240, 240)).save(self.reports_root / plot)
 
     def test_publishes_real_samples_and_report_artifacts(self) -> None:
         self._write_episode(
@@ -207,35 +365,7 @@ class PublishEvidenceTests(unittest.TestCase):
             end_reason="goal",
         )
         self._write_report()
-        ml_dataset = self.root / "ml_dataset"
-        ml_dataset.mkdir()
-        (ml_dataset / "dataset.json").write_text(
-            json.dumps(
-                {
-                    "schema_version": 1,
-                    "dataset_type": "simtrace_causal_transition_index",
-                    "source_episodes_root": "../episodes",
-                    "episode_count": 4,
-                    "transition_count": 8,
-                    "sensor_policy_sample_count": 4,
-                    "state_features": ["position_x_cm"],
-                    "action_features": ["move_right"],
-                    "split": {"unit": "seed"},
-                    "causal_alignment": {
-                        "same_frame_sensor_action_pairing": False
-                    },
-                    "sensor": {"depth_max_cm": 2000},
-                    "source_engine_versions": ["5.8.1-test"],
-                    "source_git_revisions": ["abc123def456"],
-                    "files": {
-                        "transitions": "transitions.jsonl",
-                        "sensor_policy": "sensor_policy.jsonl",
-                    },
-                    "complete": True,
-                }
-            ),
-            encoding="utf-8",
-        )
+        self._write_ml_dataset()
 
         evidence = publish_evidence(
             self.episodes_root,
@@ -251,37 +381,32 @@ class PublishEvidenceTests(unittest.TestCase):
         self.assertTrue((self.output_root / "sample" / "manifest.json").is_file())
         self.assertTrue((self.output_root / "sample" / "rgb.png").is_file())
         self.assertTrue((self.output_root / "sample" / "depth.png").is_file())
-        self.assertTrue(
-            (self.output_root / "sample" / "depth_preview.png").is_file()
-        )
-        self.assertTrue(
-            (self.output_root / "runtime_first_person.png").is_file()
-        )
-        self.assertTrue(
-            (self.output_root / "reports" / "summary.md").is_file()
-        )
+        self.assertTrue((self.output_root / "sample" / "depth_preview.png").is_file())
+        self.assertTrue((self.output_root / "runtime_first_person.png").is_file())
+        self.assertTrue((self.output_root / "reports" / "summary.md").is_file())
         public_ml_manifest = json.loads(
-            (self.output_root / "ml_dataset_manifest.json").read_text(
-                encoding="utf-8"
-            )
+            (self.output_root / "ml_dataset_manifest.json").read_text(encoding="utf-8")
         )
         self.assertNotIn("source_episodes_root", public_ml_manifest)
         self.assertNotIn("files", public_ml_manifest)
+        self.assertEqual(
+            "simtrace_ml_dataset_summary",
+            public_ml_manifest["artifact_type"],
+        )
+        self.assertTrue(public_ml_manifest["verified_complete"])
         self.assertFalse(public_ml_manifest["raw_episode_data_published"])
         self.assertFalse(public_ml_manifest["training_indexes_published"])
-        excerpt = (
-            self.output_root / "sample" / "trajectory_excerpt.jsonl"
-        ).read_text(encoding="utf-8")
+        excerpt = (self.output_root / "sample" / "trajectory_excerpt.jsonl").read_text(
+            encoding="utf-8"
+        )
         self.assertEqual(len(excerpt.strip().splitlines()), 3)
         copied_manifest = json.loads(
-            (self.output_root / "sample" / "manifest.json").read_text(
-                encoding="utf-8"
-            )
+            (self.output_root / "sample" / "manifest.json").read_text(encoding="utf-8")
         )
         self.assertEqual(copied_manifest["episode_id"], selected.name)
         readme = (self.output_root / "README.md").read_text(encoding="utf-8")
         self.assertIn("1 human-play episode", readme)
-        self.assertIn("ML dataset manifest", readme)
+        self.assertIn("Verified ML dataset summary", readme)
         self.assertIn(
             "The compact sample uses a deterministic bot episode.",
             readme,
@@ -294,9 +419,7 @@ class PublishEvidenceTests(unittest.TestCase):
         with Image.open(self.output_root / "sample" / "depth.png") as depth:
             self.assertIn(depth.mode, {"I;16", "I"})
         public_summary = json.loads(
-            (self.output_root / "reports" / "summary.json").read_text(
-                encoding="utf-8"
-            )
+            (self.output_root / "reports" / "summary.json").read_text(encoding="utf-8")
         )
         self.assertNotIn("episodes_root", public_summary)
         self.assertNotIn("path", public_summary["episodes"][0])
@@ -374,9 +497,7 @@ class PublishEvidenceTests(unittest.TestCase):
         self.assertEqual(evidence["source_combat_sim_frame"], 1)
         excerpt = [
             json.loads(line)
-            for line in (
-                self.output_root / "sample" / "trajectory_excerpt.jsonl"
-            )
+            for line in (self.output_root / "sample" / "trajectory_excerpt.jsonl")
             .read_text(encoding="utf-8")
             .splitlines()
         ]
@@ -509,9 +630,7 @@ class PublishEvidenceTests(unittest.TestCase):
         summary = json.loads(
             (self.reports_root / "summary.json").read_text(encoding="utf-8")
         )
-        manifest = json.loads(
-            (episode / "manifest.json").read_text(encoding="utf-8")
-        )
+        manifest = json.loads((episode / "manifest.json").read_text(encoding="utf-8"))
         self.output_root.mkdir()
 
         _create_video(
@@ -539,6 +658,11 @@ class PublishEvidenceTests(unittest.TestCase):
         stale_replay.parent.mkdir(parents=True)
         stale_replay.write_bytes(b"stale replay")
         (self.output_root / "stale.txt").write_text("old run", encoding="utf-8")
+        pubg_summary = self.output_root / "pubg" / "public-summary.json"
+        pubg_summary.parent.mkdir()
+        pubg_summary.write_text(
+            json.dumps(self._public_pubg_summary()), encoding="utf-8"
+        )
 
         evidence = publish_evidence(
             self.episodes_root,
@@ -549,10 +673,126 @@ class PublishEvidenceTests(unittest.TestCase):
 
         self.assertFalse(stale_replay.exists())
         self.assertFalse((self.output_root / "stale.txt").exists())
+        self.assertTrue(pubg_summary.is_file())
+        self.assertIn(
+            "pubg/public-summary.json",
+            evidence["artifacts_sha256"],
+        )
         self.assertNotIn(
             "sample/native_replay.replay",
             evidence["artifacts_sha256"],
         )
+
+    def test_refresh_rejects_unsanitized_pubg_evidence(self) -> None:
+        self._write_episode(
+            "episode_bot_s1000",
+            mode="bot",
+            seed=1000,
+            capture_hz=10,
+            end_reason="goal",
+        )
+        self._write_report()
+        pubg_summary = self.output_root / "pubg" / "public-summary.json"
+        pubg_summary.parent.mkdir(parents=True)
+        unsafe = self._public_pubg_summary()
+        unsafe["account_id"] = "must-not-publish"
+        pubg_summary.write_text(json.dumps(unsafe), encoding="utf-8")
+
+        with self.assertRaisesRegex(ValueError, "not sanitized"):
+            publish_evidence(
+                self.episodes_root,
+                self.reports_root,
+                self.output_root,
+                create_video=False,
+            )
+        self.assertIn("must-not-publish", pubg_summary.read_text(encoding="utf-8"))
+
+    def test_public_evidence_removes_host_fingerprint_values(self) -> None:
+        episode = self._write_episode(
+            "episode_bot_s1000",
+            mode="bot",
+            seed=1000,
+            capture_hz=10,
+            end_reason="goal",
+        )
+        manifest_path = episode / "manifest.json"
+        manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+        manifest["host_fingerprint"] = "private-host-sentinel"
+        manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
+        trajectory_path = episode / "trajectory.jsonl"
+        rows = [
+            json.loads(line)
+            for line in trajectory_path.read_text(encoding="utf-8").splitlines()
+        ]
+        rows[0]["host_fingerprint"] = "private-host-sentinel"
+        trajectory_path.write_text(
+            "".join(json.dumps(row) + "\n" for row in rows),
+            encoding="utf-8",
+        )
+        self._write_report()
+        summary_path = self.reports_root / "summary.json"
+        summary = json.loads(summary_path.read_text(encoding="utf-8"))
+        summary["replay_comparisons"][0].update(
+            {
+                "original_host_fingerprint": "private-host-sentinel",
+                "replayed_host_fingerprint": "private-host-sentinel",
+                "host_fingerprint_match": True,
+            }
+        )
+        summary_path.write_text(json.dumps(summary), encoding="utf-8")
+
+        publish_evidence(
+            self.episodes_root,
+            self.reports_root,
+            self.output_root,
+            create_video=False,
+        )
+
+        public_text = "\n".join(
+            path.read_text(encoding="utf-8")
+            for path in self.output_root.rglob("*")
+            if path.is_file() and path.suffix in {".json", ".jsonl", ".md"}
+        )
+        self.assertNotIn("private-host-sentinel", public_text)
+
+    def test_rejects_contaminated_or_stale_ml_dataset(self) -> None:
+        episode = self._write_episode(
+            "episode_bot_s1000",
+            mode="bot",
+            seed=1000,
+            capture_hz=10,
+            end_reason="goal",
+        )
+        self._write_report()
+        self._write_ml_dataset()
+        dataset_path = self.root / "ml_dataset" / "dataset.json"
+        dataset = json.loads(dataset_path.read_text(encoding="utf-8"))
+        dataset["operator_workspace"] = "C:/private/workspace"
+        dataset_path.write_text(json.dumps(dataset), encoding="utf-8")
+
+        with self.assertRaisesRegex(ValueError, "fields do not match schema"):
+            publish_evidence(
+                self.episodes_root,
+                self.reports_root,
+                self.output_root,
+                create_video=False,
+            )
+
+        dataset.pop("operator_workspace")
+        dataset_path.write_text(json.dumps(dataset), encoding="utf-8")
+        manifest_path = episode / "manifest.json"
+        manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+        manifest["duration_s"] = 9.0
+        manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
+        with self.assertRaisesRegex(
+            ValueError, "source_manifest_set_sha256 does not match"
+        ):
+            publish_evidence(
+                self.episodes_root,
+                self.reports_root,
+                self.output_root,
+                create_video=False,
+            )
 
     def test_failed_refresh_preserves_previous_output(self) -> None:
         self._write_episode(
@@ -615,6 +855,25 @@ class PublishEvidenceTests(unittest.TestCase):
         self.assertTrue(process.stdin.closed)
         self.assertTrue(process.killed)
         self.assertTrue(process.waited)
+
+
+class PublishedEvidenceConsistencyTests(unittest.TestCase):
+    def test_readme_and_public_sample_use_one_revision(self) -> None:
+        repository_root = Path(__file__).resolve().parents[2]
+        evidence = json.loads(
+            (repository_root / "docs" / "evidence" / "evidence.json").read_text(
+                encoding="utf-8"
+            )
+        )
+        sample = json.loads(
+            (
+                repository_root / "docs" / "evidence" / "sample" / "manifest.json"
+            ).read_text(encoding="utf-8")
+        )
+        readme = (repository_root / "README.md").read_text(encoding="utf-8")
+
+        self.assertEqual(evidence["git_revision"], sample["git_revision"])
+        self.assertIn(sample["git_revision"], readme)
 
 
 if __name__ == "__main__":

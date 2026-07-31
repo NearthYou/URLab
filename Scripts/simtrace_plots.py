@@ -48,9 +48,7 @@ def write_plots(
 
     plt.figure(figsize=(max(8, len(results) * 0.4), 4.5))
     plt.bar(range(len(results)), sizes_mb, color="#277da1")
-    plt.xticks(
-        range(len(results)), episode_labels, rotation=55, ha="right", fontsize=7
-    )
+    plt.xticks(range(len(results)), episode_labels, rotation=55, ha="right", fontsize=7)
     plt.ylabel("MiB")
     plt.title("Episode sizes")
     plt.tight_layout()
@@ -158,15 +156,13 @@ def write_plots(
     pairs = performance.get("paired_by_seed", {}).get("pairs", [])
     if pairs:
         labels = [f"seed {pair['seed']}" for pair in pairs]
-        deltas = [float(pair["delta_ms"]) for pair in pairs]
+        deltas = [float(pair["p95_delta_ms"]) for pair in pairs]
         colors = ["#e76f51" if delta > 0 else "#277da1" for delta in deltas]
         plt.bar(range(len(pairs)), deltas, color=colors)
-        plt.xticks(
-            range(len(pairs)), labels, rotation=55, ha="right", fontsize=7
-        )
+        plt.xticks(range(len(pairs)), labels, rotation=55, ha="right", fontsize=7)
         plt.axhline(0.0, color="#222222", linewidth=0.8)
-        plt.ylabel("Median frame-time delta ms (on - off)")
-        plt.title("Paired capture cost by course seed")
+        plt.ylabel("P95 frame-time delta ms (on - off)")
+        plt.title("Paired capture tail cost by course seed")
     else:
         capture_on, capture_off = bot_frame_times_by_capture(results)
         data: list[list[float]] = []

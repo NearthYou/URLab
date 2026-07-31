@@ -52,9 +52,15 @@ class ExportMlDatasetTests(unittest.TestCase):
                 fixture.rows[0]["position_cm"],
                 transitions[0]["observation_state"][:3],
             )
-            self.assertEqual(fixture.rows[1]["move_input"], transitions[0]["action"][:2])
-            self.assertEqual(fixture.rows[1]["position_cm"], transitions[0]["outcome_state"][:3])
-            self.assertEqual("episode_original/rgb/000000.png", transitions[0]["rgb_path"])
+            self.assertEqual(
+                fixture.rows[1]["move_input"], transitions[0]["action"][:2]
+            )
+            self.assertEqual(
+                fixture.rows[1]["position_cm"], transitions[0]["outcome_state"][:3]
+            )
+            self.assertEqual(
+                "episode_original/rgb/000000.png", transitions[0]["rgb_path"]
+            )
             self.assertEqual(transitions[0], sensor_samples[0])
 
     def test_export_assigns_every_episode_with_same_seed_to_one_split(self) -> None:
@@ -85,7 +91,9 @@ class ExportMlDatasetTests(unittest.TestCase):
                 splits_by_seed.setdefault(row["seed"], set()).add(row["split"])
 
             self.assertTrue(all(len(splits) == 1 for splits in splits_by_seed.values()))
-            self.assertEqual({"train", "validation", "test"}, {row["split"] for row in rows})
+            self.assertEqual(
+                {"train", "validation", "test"}, {row["split"] for row in rows}
+            )
 
     def test_export_excludes_input_replay_duplicates_by_default(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
@@ -135,6 +143,61 @@ class ExportMlDatasetTests(unittest.TestCase):
                 export_dataset(root / "episodes", output)
 
             self.assertFalse((output / "dataset.json").exists())
+
+    def test_partial_episode_fails_without_replacing_previous_dataset(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            episodes = root / "episodes"
+            DatasetFixture(episodes, "episode_valid")
+            output = root / "ml_dataset"
+            export_dataset(episodes, output)
+            previous_manifest = (output / "dataset.json").read_bytes()
+            interrupted = episodes / "episode_interrupted"
+            interrupted.mkdir()
+            (interrupted / "manifest.partial.json").write_text(
+                '{"complete":false}', encoding="utf-8"
+            )
+
+            with self.assertRaisesRegex(
+                DatasetExportError, "manifest.partial.json remains"
+            ):
+                export_dataset(episodes, output)
+
+            self.assertEqual(previous_manifest, (output / "dataset.json").read_bytes())
+            with self.assertRaisesRegex(
+                DatasetExportError, "manifest.partial.json remains"
+            ):
+                inspect_dataset(output)
+
+    def test_inspect_rejects_dataset_member_path_escape(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            DatasetFixture(root / "episodes", "episode_original")
+            output = root / "ml_dataset"
+            export_dataset(root / "episodes", output)
+            manifest_path = output / "dataset.json"
+            manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+            manifest["files"]["sensor_policy"] = "../outside.jsonl"
+            manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
+
+            with self.assertRaisesRegex(
+                DatasetExportError, "dataset member must be sensor_policy.jsonl"
+            ):
+                inspect_dataset(output)
+
+    def test_inspect_rejects_tampered_index_hash(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            DatasetFixture(root / "episodes", "episode_original")
+            output = root / "ml_dataset"
+            export_dataset(root / "episodes", output)
+            with (output / "transitions.jsonl").open("a", encoding="utf-8") as stream:
+                stream.write('{"transition_id":"tampered"}\n')
+
+            with self.assertRaisesRegex(
+                DatasetExportError, "transitions sha256 does not match"
+            ):
+                inspect_dataset(output)
 
 
 if __name__ == "__main__":

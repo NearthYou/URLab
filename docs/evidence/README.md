@@ -3,9 +3,9 @@
 This directory contains a compact, tracked extract of a real SimTrace run.
 The full generated dataset remains under `Saved/SimTrace` and is ignored by Git.
 
-- Source episode: `episode_20260731T091927349Z_bot_s5150_00`
-- Git revision recorded by Unreal: `4a349dc95d0f`
-- Valid episodes: 40
+- Source episode: `episode_20260731T130243221Z_bot_s6009_00`
+- Git revision recorded by Unreal: `ad1c6bff321f`
+- Valid episodes: 60
 - Missing captures: 0
 - Capture drops: 0
 - Replay comparisons: 7
@@ -30,6 +30,12 @@ one was present.
 - [Combat ledger plot](reports/combat_ledger.png)
 - [Replay error plot](reports/replay_error.png)
 - [Capture performance plot](reports/capture_performance.png)
+
+## ML consumption contract
+
+- [Verified ML dataset summary](ml_dataset_manifest.json)
+
+Only the validated counts, feature schema, causal alignment, and seed-level split contract are published. Raw episodes and generated training indexes remain under `Saved/SimTrace`.
 
 ## 60-second evidence reel
 

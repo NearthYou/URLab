@@ -1,55 +1,817 @@
 {
   "schema_version": 2,
-  "generated_utc": "2026-07-31T09:26:23.566153Z",
-  "source_episode_id": "episode_20260731T091927349Z_bot_s5150_00",
-  "source_sim_frame": 141,
-  "git_revision": "4a349dc95d0f",
-  "course_hash": "633e6795",
+  "generated_utc": "2026-07-31T14:08:07.845239Z",
+  "source_episode_id": "episode_20260731T130243221Z_bot_s6009_00",
+  "source_sim_frame": 144,
+  "git_revision": "ad1c6bff321f",
+  "course_hash": "fab5b61f",
   "source_shots_fired": 1,
   "source_shots_hit": 1,
-  "source_combat_sim_frame": 142,
+  "source_combat_sim_frame": 143,
   "summary": {
-    "episode_count": 40,
-    "valid_episode_count": 40,
+    "episode_count": 60,
+    "valid_episode_count": 60,
     "error_count": 0,
     "warning_count": 0,
-    "total_bytes": 98676683,
+    "total_bytes": 135810684,
     "missing_capture_frames": 0,
     "capture_dropped": 0,
     "modes": {
-      "bot": 23,
+      "bot": 43,
       "input-replay": 7,
       "human": 10
     },
     "outcomes": {
-      "goal": 33,
+      "goal": 53,
       "replay_source_end": 7
     },
     "replay_comparison_count": 7,
     "performance": {
-      "capture_on_ms": {
-        "count": 1980,
-        "mean": 36.75379176633527,
-        "p50": 34.210601821541786,
-        "p95": 45.06121110171079
+      "method": "paired_by_course_seed",
+      "primary_source": "registered_alternating_benchmark",
+      "pooled_frame_samples": {
+        "capture_on_ms": {
+          "count": 3630,
+          "mean": 35.13444292028088,
+          "p50": 33.4210991859436,
+          "p95": 43.29445995390415
+        },
+        "capture_off_ms": {
+          "count": 3465,
+          "mean": 35.54268398605728,
+          "p50": 33.42210128903389,
+          "p95": 45.36739960312843
+        }
       },
-      "capture_off_ms": {
-        "count": 1815,
-        "mean": 37.691401437786986,
-        "p50": 36.1361987888813,
-        "p95": 45.97857780754566
+      "paired_by_seed": {
+        "method": "paired episode median and p95 frame times by course seed",
+        "pairing_unit": "course_seed",
+        "minimum_pairs_for_interpretation": 5,
+        "pair_count": 10,
+        "median_delta_ms": -0.003548339009284973,
+        "median_overhead_percent": -0.010642349770554133,
+        "bootstrap_ci95_delta_ms": [
+          -0.013697892427444458,
+          0.014197081327438354
+        ],
+        "interpretation": "inconclusive",
+        "median_p95_delta_ms": 0.08883960545063019,
+        "bootstrap_ci95_p95_delta_ms": [
+          0.0223405659198761,
+          0.34077689051628113
+        ],
+        "tail_interpretation": "capture_tail_overhead_detected",
+        "pairs": [
+          {
+            "seed": 6000,
+            "capture_off_episode_ids": [
+              "episode_20260731T125443784Z_bot_s6000_00"
+            ],
+            "capture_on_episode_ids": [
+              "episode_20260731T125513006Z_bot_s6000_00"
+            ],
+            "capture_off_median_ms": 33.32959860563278,
+            "capture_on_median_ms": 33.34429860115051,
+            "delta_ms": 0.014699995517730713,
+            "overhead_percent": 0.04410492815009893,
+            "capture_off_p95_ms": 33.81966128945351,
+            "capture_on_p95_ms": 33.91724228858948,
+            "p95_delta_ms": 0.09758099913597107,
+            "p95_overhead_percent": 0.28853334248619816
+          },
+          {
+            "seed": 6001,
+            "capture_off_episode_ids": [
+              "episode_20260731T125607878Z_bot_s6001_00"
+            ],
+            "capture_on_episode_ids": [
+              "episode_20260731T125541146Z_bot_s6001_00"
+            ],
+            "capture_off_median_ms": 33.32680091261864,
+            "capture_on_median_ms": 33.30929949879646,
+            "delta_ms": -0.017501413822174072,
+            "overhead_percent": -0.052514532877193904,
+            "capture_off_p95_ms": 33.521462231874466,
+            "capture_on_p95_ms": 33.93345847725868,
+            "p95_delta_ms": 0.4119962453842163,
+            "p95_overhead_percent": 1.2290521294517471
+          },
+          {
+            "seed": 6002,
+            "capture_off_episode_ids": [
+              "episode_20260731T125631969Z_bot_s6002_00"
+            ],
+            "capture_on_episode_ids": [
+              "episode_20260731T125656241Z_bot_s6002_00"
+            ],
+            "capture_off_median_ms": 33.33919867873192,
+            "capture_on_median_ms": 33.31650048494339,
+            "delta_ms": -0.022698193788528442,
+            "overhead_percent": -0.06808260152637774,
+            "capture_off_p95_ms": 33.60334187746048,
+            "capture_on_p95_ms": 33.95205959677696,
+            "p95_delta_ms": 0.34871771931648254,
+            "p95_overhead_percent": 1.0377471401152092
+          },
+          {
+            "seed": 6003,
+            "capture_off_episode_ids": [
+              "episode_20260731T125748936Z_bot_s6003_00"
+            ],
+            "capture_on_episode_ids": [
+              "episode_20260731T125722459Z_bot_s6003_00"
+            ],
+            "capture_off_median_ms": 33.339597284793854,
+            "capture_on_median_ms": 33.336300402879715,
+            "delta_ms": -0.003296881914138794,
+            "overhead_percent": -0.009888787455877571,
+            "capture_off_p95_ms": 33.81730169057846,
+            "capture_on_p95_ms": 33.70665907859802,
+            "p95_delta_ms": -0.11064261198043823,
+            "p95_overhead_percent": -0.3271775288069875
+          },
+          {
+            "seed": 6004,
+            "capture_off_episode_ids": [
+              "episode_20260731T125816008Z_bot_s6004_00"
+            ],
+            "capture_on_episode_ids": [
+              "episode_20260731T125842870Z_bot_s6004_00"
+            ],
+            "capture_off_median_ms": 33.33570063114166,
+            "capture_on_median_ms": 33.33909809589386,
+            "delta_ms": 0.0033974647521972656,
+            "overhead_percent": 0.010191670455017855,
+            "capture_off_p95_ms": 33.75954255461693,
+            "capture_on_p95_ms": 33.83964076638222,
+            "p95_delta_ms": 0.0800982117652893,
+            "p95_overhead_percent": 0.23726095113908804
+          },
+          {
+            "seed": 6005,
+            "capture_off_episode_ids": [
+              "episode_20260731T125936348Z_bot_s6005_00"
+            ],
+            "capture_on_episode_ids": [
+              "episode_20260731T125909811Z_bot_s6005_00"
+            ],
+            "capture_off_median_ms": 33.332303166389465,
+            "capture_on_median_ms": 33.346500247716904,
+            "delta_ms": 0.014197081327438354,
+            "overhead_percent": 0.042592560305745514,
+            "capture_off_p95_ms": 33.760861307382584,
+            "capture_on_p95_ms": 33.78320187330246,
+            "p95_delta_ms": 0.0223405659198761,
+            "p95_overhead_percent": 0.06617297383639564
+          },
+          {
+            "seed": 6006,
+            "capture_off_episode_ids": [
+              "episode_20260731T130003198Z_bot_s6006_00"
+            ],
+            "capture_on_episode_ids": [
+              "episode_20260731T130029360Z_bot_s6006_00"
+            ],
+            "capture_off_median_ms": 33.34350138902664,
+            "capture_on_median_ms": 33.33970159292221,
+            "delta_ms": -0.0037997961044311523,
+            "overhead_percent": -0.011395912085230697,
+            "capture_off_p95_ms": 33.789339661598206,
+            "capture_on_p95_ms": 33.81134048104286,
+            "p95_delta_ms": 0.022000819444656372,
+            "p95_overhead_percent": 0.06511171767485127
+          },
+          {
+            "seed": 6007,
+            "capture_off_episode_ids": [
+              "episode_20260731T130123664Z_bot_s6007_00"
+            ],
+            "capture_on_episode_ids": [
+              "episode_20260731T130056189Z_bot_s6007_00"
+            ],
+            "capture_off_median_ms": 33.32500159740448,
+            "capture_on_median_ms": 33.344101160764694,
+            "delta_ms": 0.019099563360214233,
+            "overhead_percent": 0.057313015587977655,
+            "capture_off_p95_ms": 33.64686146378517,
+            "capture_on_p95_ms": 33.85023847222328,
+            "p95_delta_ms": 0.20337700843811035,
+            "p95_overhead_percent": 0.6044457033741745
+          },
+          {
+            "seed": 6008,
+            "capture_off_episode_ids": [
+              "episode_20260731T130150086Z_bot_s6008_00"
+            ],
+            "capture_on_episode_ids": [
+              "episode_20260731T130216951Z_bot_s6008_00"
+            ],
+            "capture_off_median_ms": 33.33659842610359,
+            "capture_on_median_ms": 33.32290053367615,
+            "delta_ms": -0.013697892427444458,
+            "overhead_percent": -0.04108965243652028,
+            "capture_off_p95_ms": 33.67206230759621,
+            "capture_on_p95_ms": 34.01283919811249,
+            "p95_delta_ms": 0.34077689051628113,
+            "p95_overhead_percent": 1.0120463884963884
+          },
+          {
+            "seed": 6009,
+            "capture_off_episode_ids": [
+              "episode_20260731T130309949Z_bot_s6009_00"
+            ],
+            "capture_on_episode_ids": [
+              "episode_20260731T130243221Z_bot_s6009_00"
+            ],
+            "capture_off_median_ms": 33.334098756313324,
+            "capture_on_median_ms": 33.329300582408905,
+            "delta_ms": -0.004798173904418945,
+            "overhead_percent": -0.01439419118391552,
+            "capture_off_p95_ms": 33.693139255046844,
+            "capture_on_p95_ms": 33.76609981060028,
+            "p95_delta_ms": 0.07296055555343628,
+            "p95_overhead_percent": 0.21654424956115548
+          }
+        ],
+        "design_count": 1,
+        "design_ids": [
+          "capture_20260731T125354649Z"
+        ],
+        "declared_pair_count": 10,
+        "design_errors": [],
+        "registry_sha256": "f50e2059c55b45cf71f1a83a532eec5ceb3d24e8b987dec4275d836fbacc50e9",
+        "evidence_level": "registered_alternating_benchmark"
       },
-      "median_fps_drop_percent": -5.62865563542061
+      "registered_benchmark": {
+        "method": "paired episode median and p95 frame times by course seed",
+        "pairing_unit": "course_seed",
+        "minimum_pairs_for_interpretation": 5,
+        "pair_count": 10,
+        "median_delta_ms": -0.003548339009284973,
+        "median_overhead_percent": -0.010642349770554133,
+        "bootstrap_ci95_delta_ms": [
+          -0.013697892427444458,
+          0.014197081327438354
+        ],
+        "interpretation": "inconclusive",
+        "median_p95_delta_ms": 0.08883960545063019,
+        "bootstrap_ci95_p95_delta_ms": [
+          0.0223405659198761,
+          0.34077689051628113
+        ],
+        "tail_interpretation": "capture_tail_overhead_detected",
+        "pairs": [
+          {
+            "seed": 6000,
+            "capture_off_episode_ids": [
+              "episode_20260731T125443784Z_bot_s6000_00"
+            ],
+            "capture_on_episode_ids": [
+              "episode_20260731T125513006Z_bot_s6000_00"
+            ],
+            "capture_off_median_ms": 33.32959860563278,
+            "capture_on_median_ms": 33.34429860115051,
+            "delta_ms": 0.014699995517730713,
+            "overhead_percent": 0.04410492815009893,
+            "capture_off_p95_ms": 33.81966128945351,
+            "capture_on_p95_ms": 33.91724228858948,
+            "p95_delta_ms": 0.09758099913597107,
+            "p95_overhead_percent": 0.28853334248619816
+          },
+          {
+            "seed": 6001,
+            "capture_off_episode_ids": [
+              "episode_20260731T125607878Z_bot_s6001_00"
+            ],
+            "capture_on_episode_ids": [
+              "episode_20260731T125541146Z_bot_s6001_00"
+            ],
+            "capture_off_median_ms": 33.32680091261864,
+            "capture_on_median_ms": 33.30929949879646,
+            "delta_ms": -0.017501413822174072,
+            "overhead_percent": -0.052514532877193904,
+            "capture_off_p95_ms": 33.521462231874466,
+            "capture_on_p95_ms": 33.93345847725868,
+            "p95_delta_ms": 0.4119962453842163,
+            "p95_overhead_percent": 1.2290521294517471
+          },
+          {
+            "seed": 6002,
+            "capture_off_episode_ids": [
+              "episode_20260731T125631969Z_bot_s6002_00"
+            ],
+            "capture_on_episode_ids": [
+              "episode_20260731T125656241Z_bot_s6002_00"
+            ],
+            "capture_off_median_ms": 33.33919867873192,
+            "capture_on_median_ms": 33.31650048494339,
+            "delta_ms": -0.022698193788528442,
+            "overhead_percent": -0.06808260152637774,
+            "capture_off_p95_ms": 33.60334187746048,
+            "capture_on_p95_ms": 33.95205959677696,
+            "p95_delta_ms": 0.34871771931648254,
+            "p95_overhead_percent": 1.0377471401152092
+          },
+          {
+            "seed": 6003,
+            "capture_off_episode_ids": [
+              "episode_20260731T125748936Z_bot_s6003_00"
+            ],
+            "capture_on_episode_ids": [
+              "episode_20260731T125722459Z_bot_s6003_00"
+            ],
+            "capture_off_median_ms": 33.339597284793854,
+            "capture_on_median_ms": 33.336300402879715,
+            "delta_ms": -0.003296881914138794,
+            "overhead_percent": -0.009888787455877571,
+            "capture_off_p95_ms": 33.81730169057846,
+            "capture_on_p95_ms": 33.70665907859802,
+            "p95_delta_ms": -0.11064261198043823,
+            "p95_overhead_percent": -0.3271775288069875
+          },
+          {
+            "seed": 6004,
+            "capture_off_episode_ids": [
+              "episode_20260731T125816008Z_bot_s6004_00"
+            ],
+            "capture_on_episode_ids": [
+              "episode_20260731T125842870Z_bot_s6004_00"
+            ],
+            "capture_off_median_ms": 33.33570063114166,
+            "capture_on_median_ms": 33.33909809589386,
+            "delta_ms": 0.0033974647521972656,
+            "overhead_percent": 0.010191670455017855,
+            "capture_off_p95_ms": 33.75954255461693,
+            "capture_on_p95_ms": 33.83964076638222,
+            "p95_delta_ms": 0.0800982117652893,
+            "p95_overhead_percent": 0.23726095113908804
+          },
+          {
+            "seed": 6005,
+            "capture_off_episode_ids": [
+              "episode_20260731T125936348Z_bot_s6005_00"
+            ],
+            "capture_on_episode_ids": [
+              "episode_20260731T125909811Z_bot_s6005_00"
+            ],
+            "capture_off_median_ms": 33.332303166389465,
+            "capture_on_median_ms": 33.346500247716904,
+            "delta_ms": 0.014197081327438354,
+            "overhead_percent": 0.042592560305745514,
+            "capture_off_p95_ms": 33.760861307382584,
+            "capture_on_p95_ms": 33.78320187330246,
+            "p95_delta_ms": 0.0223405659198761,
+            "p95_overhead_percent": 0.06617297383639564
+          },
+          {
+            "seed": 6006,
+            "capture_off_episode_ids": [
+              "episode_20260731T130003198Z_bot_s6006_00"
+            ],
+            "capture_on_episode_ids": [
+              "episode_20260731T130029360Z_bot_s6006_00"
+            ],
+            "capture_off_median_ms": 33.34350138902664,
+            "capture_on_median_ms": 33.33970159292221,
+            "delta_ms": -0.0037997961044311523,
+            "overhead_percent": -0.011395912085230697,
+            "capture_off_p95_ms": 33.789339661598206,
+            "capture_on_p95_ms": 33.81134048104286,
+            "p95_delta_ms": 0.022000819444656372,
+            "p95_overhead_percent": 0.06511171767485127
+          },
+          {
+            "seed": 6007,
+            "capture_off_episode_ids": [
+              "episode_20260731T130123664Z_bot_s6007_00"
+            ],
+            "capture_on_episode_ids": [
+              "episode_20260731T130056189Z_bot_s6007_00"
+            ],
+            "capture_off_median_ms": 33.32500159740448,
+            "capture_on_median_ms": 33.344101160764694,
+            "delta_ms": 0.019099563360214233,
+            "overhead_percent": 0.057313015587977655,
+            "capture_off_p95_ms": 33.64686146378517,
+            "capture_on_p95_ms": 33.85023847222328,
+            "p95_delta_ms": 0.20337700843811035,
+            "p95_overhead_percent": 0.6044457033741745
+          },
+          {
+            "seed": 6008,
+            "capture_off_episode_ids": [
+              "episode_20260731T130150086Z_bot_s6008_00"
+            ],
+            "capture_on_episode_ids": [
+              "episode_20260731T130216951Z_bot_s6008_00"
+            ],
+            "capture_off_median_ms": 33.33659842610359,
+            "capture_on_median_ms": 33.32290053367615,
+            "delta_ms": -0.013697892427444458,
+            "overhead_percent": -0.04108965243652028,
+            "capture_off_p95_ms": 33.67206230759621,
+            "capture_on_p95_ms": 34.01283919811249,
+            "p95_delta_ms": 0.34077689051628113,
+            "p95_overhead_percent": 1.0120463884963884
+          },
+          {
+            "seed": 6009,
+            "capture_off_episode_ids": [
+              "episode_20260731T130309949Z_bot_s6009_00"
+            ],
+            "capture_on_episode_ids": [
+              "episode_20260731T130243221Z_bot_s6009_00"
+            ],
+            "capture_off_median_ms": 33.334098756313324,
+            "capture_on_median_ms": 33.329300582408905,
+            "delta_ms": -0.004798173904418945,
+            "overhead_percent": -0.01439419118391552,
+            "capture_off_p95_ms": 33.693139255046844,
+            "capture_on_p95_ms": 33.76609981060028,
+            "p95_delta_ms": 0.07296055555343628,
+            "p95_overhead_percent": 0.21654424956115548
+          }
+        ],
+        "design_count": 1,
+        "design_ids": [
+          "capture_20260731T125354649Z"
+        ],
+        "declared_pair_count": 10,
+        "design_errors": [],
+        "registry_sha256": "f50e2059c55b45cf71f1a83a532eec5ceb3d24e8b987dec4275d836fbacc50e9",
+        "evidence_level": "registered_alternating_benchmark"
+      },
+      "historical_seed_pairs": {
+        "method": "paired episode median and p95 frame times by course seed",
+        "pairing_unit": "course_seed",
+        "minimum_pairs_for_interpretation": 5,
+        "pair_count": 20,
+        "median_delta_ms": -0.009248033165931702,
+        "median_overhead_percent": -0.027741921810217902,
+        "bootstrap_ci95_delta_ms": [
+          -1.0841470211744308,
+          0.00879727303981781
+        ],
+        "interpretation": "inconclusive",
+        "median_p95_delta_ms": 0.06182081997394562,
+        "bootstrap_ci95_p95_delta_ms": [
+          -0.2103116363286972,
+          0.20836852490901947
+        ],
+        "tail_interpretation": "inconclusive",
+        "pairs": [
+          {
+            "seed": 1000,
+            "capture_off_episode_ids": [
+              "episode_20260730T164830642Z_bot_s1000_00"
+            ],
+            "capture_on_episode_ids": [
+              "episode_20260730T164634194Z_bot_s1000_00"
+            ],
+            "capture_off_median_ms": 36.1642986536026,
+            "capture_on_median_ms": 35.11030226945877,
+            "delta_ms": -1.0539963841438293,
+            "overhead_percent": -2.9144665412689617,
+            "capture_off_p95_ms": 43.75233873724937,
+            "capture_on_p95_ms": 43.965698778629296,
+            "p95_delta_ms": 0.2133600413799286,
+            "p95_overhead_percent": 0.48765402613387737
+          },
+          {
+            "seed": 1001,
+            "capture_off_episode_ids": [
+              "episode_20260730T164837783Z_bot_s1001_01"
+            ],
+            "capture_on_episode_ids": [
+              "episode_20260730T164641344Z_bot_s1001_01"
+            ],
+            "capture_off_median_ms": 35.0865013897419,
+            "capture_on_median_ms": 37.322599440813065,
+            "delta_ms": 2.236098051071167,
+            "overhead_percent": 6.3731006583772025,
+            "capture_off_p95_ms": 44.436059147119515,
+            "capture_on_p95_ms": 45.77403888106346,
+            "p95_delta_ms": 1.3379797339439463,
+            "p95_overhead_percent": 3.011022488547296
+          },
+          {
+            "seed": 1002,
+            "capture_off_episode_ids": [
+              "episode_20260730T164844831Z_bot_s1002_02"
+            ],
+            "capture_on_episode_ids": [
+              "episode_20260730T164648592Z_bot_s1002_02"
+            ],
+            "capture_off_median_ms": 36.68680042028427,
+            "capture_on_median_ms": 34.47859734296799,
+            "delta_ms": -2.208203077316284,
+            "overhead_percent": -6.0190669451113,
+            "capture_off_p95_ms": 45.572638511657715,
+            "capture_on_p95_ms": 43.73956099152564,
+            "p95_delta_ms": -1.833077520132072,
+            "p95_overhead_percent": -4.022320365899292
+          },
+          {
+            "seed": 1003,
+            "capture_off_episode_ids": [
+              "episode_20260730T164851990Z_bot_s1003_03"
+            ],
+            "capture_on_episode_ids": [
+              "episode_20260730T164655604Z_bot_s1003_03"
+            ],
+            "capture_off_median_ms": 37.02099993824959,
+            "capture_on_median_ms": 35.50159931182861,
+            "delta_ms": -1.5194006264209747,
+            "overhead_percent": -4.1041587989392765,
+            "capture_off_p95_ms": 46.15032002329826,
+            "capture_on_p95_ms": 45.84033936262131,
+            "p95_delta_ms": -0.3099806606769562,
+            "p95_overhead_percent": -0.6716760805135638
+          },
+          {
+            "seed": 1004,
+            "capture_off_episode_ids": [
+              "episode_20260730T164859222Z_bot_s1004_04"
+            ],
+            "capture_on_episode_ids": [
+              "episode_20260730T164702745Z_bot_s1004_04"
+            ],
+            "capture_off_median_ms": 36.07330098748207,
+            "capture_on_median_ms": 36.91260144114494,
+            "delta_ms": 0.8393004536628723,
+            "overhead_percent": 2.3266527617035133,
+            "capture_off_p95_ms": 44.68308240175247,
+            "capture_on_p95_ms": 45.320139825344086,
+            "p95_delta_ms": 0.6370574235916138,
+            "p95_overhead_percent": 1.4257239862365187
+          },
+          {
+            "seed": 1005,
+            "capture_off_episode_ids": [
+              "episode_20260730T164906257Z_bot_s1005_05"
+            ],
+            "capture_on_episode_ids": [
+              "episode_20260730T164709878Z_bot_s1005_05"
+            ],
+            "capture_off_median_ms": 36.1161008477211,
+            "capture_on_median_ms": 34.85500067472458,
+            "delta_ms": -1.261100172996521,
+            "overhead_percent": -3.491794915275566,
+            "capture_off_p95_ms": 45.37581950426101,
+            "capture_on_p95_ms": 45.426500588655465,
+            "p95_delta_ms": 0.050681084394454956,
+            "p95_overhead_percent": 0.1116918326724562
+          },
+          {
+            "seed": 1006,
+            "capture_off_episode_ids": [
+              "episode_20260730T164913385Z_bot_s1006_06"
+            ],
+            "capture_on_episode_ids": [
+              "episode_20260730T164716899Z_bot_s1006_06"
+            ],
+            "capture_off_median_ms": 35.846397280693054,
+            "capture_on_median_ms": 34.73209962248802,
+            "delta_ms": -1.1142976582050323,
+            "overhead_percent": -3.1085345885099462,
+            "capture_off_p95_ms": 45.76800018548964,
+            "capture_on_p95_ms": 44.789958745241165,
+            "p95_delta_ms": -0.9780414402484752,
+            "p95_overhead_percent": -2.1369547200765724
+          },
+          {
+            "seed": 1007,
+            "capture_off_episode_ids": [
+              "episode_20260730T164920481Z_bot_s1007_07"
+            ],
+            "capture_on_episode_ids": [
+              "episode_20260730T164723940Z_bot_s1007_07"
+            ],
+            "capture_off_median_ms": 37.53209859132767,
+            "capture_on_median_ms": 37.58929669857025,
+            "delta_ms": 0.05719810724258423,
+            "overhead_percent": 0.1523978391546714,
+            "capture_off_p95_ms": 45.84585875272751,
+            "capture_on_p95_ms": 45.47394141554832,
+            "p95_delta_ms": -0.37191733717919107,
+            "p95_overhead_percent": -0.8112343127547254
+          },
+          {
+            "seed": 1008,
+            "capture_off_episode_ids": [
+              "episode_20260730T164927729Z_bot_s1008_08"
+            ],
+            "capture_on_episode_ids": [
+              "episode_20260730T164731160Z_bot_s1008_08"
+            ],
+            "capture_off_median_ms": 41.41730070114136,
+            "capture_on_median_ms": 36.38220205903053,
+            "delta_ms": -5.035098642110825,
+            "overhead_percent": -12.15699371246584,
+            "capture_off_p95_ms": 46.548180282115936,
+            "capture_on_p95_ms": 44.353081285953515,
+            "p95_delta_ms": -2.1950989961624217,
+            "p95_overhead_percent": -4.715756841316932
+          },
+          {
+            "seed": 1009,
+            "capture_off_episode_ids": [
+              "episode_20260730T164935297Z_bot_s1009_09"
+            ],
+            "capture_on_episode_ids": [
+              "episode_20260730T164738287Z_bot_s1009_09"
+            ],
+            "capture_off_median_ms": 44.134799391031265,
+            "capture_on_median_ms": 36.87340021133423,
+            "delta_ms": -7.261399179697037,
+            "overhead_percent": -16.452774862215964,
+            "capture_off_p95_ms": 46.41733914613724,
+            "capture_on_p95_ms": 45.57124078273773,
+            "p95_delta_ms": -0.8460983633995056,
+            "p95_overhead_percent": -1.8228066902665536
+          },
+          {
+            "seed": 6000,
+            "capture_off_episode_ids": [
+              "episode_20260731T125443784Z_bot_s6000_00"
+            ],
+            "capture_on_episode_ids": [
+              "episode_20260731T125513006Z_bot_s6000_00"
+            ],
+            "capture_off_median_ms": 33.32959860563278,
+            "capture_on_median_ms": 33.34429860115051,
+            "delta_ms": 0.014699995517730713,
+            "overhead_percent": 0.04410492815009893,
+            "capture_off_p95_ms": 33.81966128945351,
+            "capture_on_p95_ms": 33.91724228858948,
+            "p95_delta_ms": 0.09758099913597107,
+            "p95_overhead_percent": 0.28853334248619816
+          },
+          {
+            "seed": 6001,
+            "capture_off_episode_ids": [
+              "episode_20260731T125607878Z_bot_s6001_00"
+            ],
+            "capture_on_episode_ids": [
+              "episode_20260731T125541146Z_bot_s6001_00"
+            ],
+            "capture_off_median_ms": 33.32680091261864,
+            "capture_on_median_ms": 33.30929949879646,
+            "delta_ms": -0.017501413822174072,
+            "overhead_percent": -0.052514532877193904,
+            "capture_off_p95_ms": 33.521462231874466,
+            "capture_on_p95_ms": 33.93345847725868,
+            "p95_delta_ms": 0.4119962453842163,
+            "p95_overhead_percent": 1.2290521294517471
+          },
+          {
+            "seed": 6002,
+            "capture_off_episode_ids": [
+              "episode_20260731T125631969Z_bot_s6002_00"
+            ],
+            "capture_on_episode_ids": [
+              "episode_20260731T125656241Z_bot_s6002_00"
+            ],
+            "capture_off_median_ms": 33.33919867873192,
+            "capture_on_median_ms": 33.31650048494339,
+            "delta_ms": -0.022698193788528442,
+            "overhead_percent": -0.06808260152637774,
+            "capture_off_p95_ms": 33.60334187746048,
+            "capture_on_p95_ms": 33.95205959677696,
+            "p95_delta_ms": 0.34871771931648254,
+            "p95_overhead_percent": 1.0377471401152092
+          },
+          {
+            "seed": 6003,
+            "capture_off_episode_ids": [
+              "episode_20260731T125748936Z_bot_s6003_00"
+            ],
+            "capture_on_episode_ids": [
+              "episode_20260731T125722459Z_bot_s6003_00"
+            ],
+            "capture_off_median_ms": 33.339597284793854,
+            "capture_on_median_ms": 33.336300402879715,
+            "delta_ms": -0.003296881914138794,
+            "overhead_percent": -0.009888787455877571,
+            "capture_off_p95_ms": 33.81730169057846,
+            "capture_on_p95_ms": 33.70665907859802,
+            "p95_delta_ms": -0.11064261198043823,
+            "p95_overhead_percent": -0.3271775288069875
+          },
+          {
+            "seed": 6004,
+            "capture_off_episode_ids": [
+              "episode_20260731T125816008Z_bot_s6004_00"
+            ],
+            "capture_on_episode_ids": [
+              "episode_20260731T125842870Z_bot_s6004_00"
+            ],
+            "capture_off_median_ms": 33.33570063114166,
+            "capture_on_median_ms": 33.33909809589386,
+            "delta_ms": 0.0033974647521972656,
+            "overhead_percent": 0.010191670455017855,
+            "capture_off_p95_ms": 33.75954255461693,
+            "capture_on_p95_ms": 33.83964076638222,
+            "p95_delta_ms": 0.0800982117652893,
+            "p95_overhead_percent": 0.23726095113908804
+          },
+          {
+            "seed": 6005,
+            "capture_off_episode_ids": [
+              "episode_20260731T125936348Z_bot_s6005_00"
+            ],
+            "capture_on_episode_ids": [
+              "episode_20260731T125909811Z_bot_s6005_00"
+            ],
+            "capture_off_median_ms": 33.332303166389465,
+            "capture_on_median_ms": 33.346500247716904,
+            "delta_ms": 0.014197081327438354,
+            "overhead_percent": 0.042592560305745514,
+            "capture_off_p95_ms": 33.760861307382584,
+            "capture_on_p95_ms": 33.78320187330246,
+            "p95_delta_ms": 0.0223405659198761,
+            "p95_overhead_percent": 0.06617297383639564
+          },
+          {
+            "seed": 6006,
+            "capture_off_episode_ids": [
+              "episode_20260731T130003198Z_bot_s6006_00"
+            ],
+            "capture_on_episode_ids": [
+              "episode_20260731T130029360Z_bot_s6006_00"
+            ],
+            "capture_off_median_ms": 33.34350138902664,
+            "capture_on_median_ms": 33.33970159292221,
+            "delta_ms": -0.0037997961044311523,
+            "overhead_percent": -0.011395912085230697,
+            "capture_off_p95_ms": 33.789339661598206,
+            "capture_on_p95_ms": 33.81134048104286,
+            "p95_delta_ms": 0.022000819444656372,
+            "p95_overhead_percent": 0.06511171767485127
+          },
+          {
+            "seed": 6007,
+            "capture_off_episode_ids": [
+              "episode_20260731T130123664Z_bot_s6007_00"
+            ],
+            "capture_on_episode_ids": [
+              "episode_20260731T130056189Z_bot_s6007_00"
+            ],
+            "capture_off_median_ms": 33.32500159740448,
+            "capture_on_median_ms": 33.344101160764694,
+            "delta_ms": 0.019099563360214233,
+            "overhead_percent": 0.057313015587977655,
+            "capture_off_p95_ms": 33.64686146378517,
+            "capture_on_p95_ms": 33.85023847222328,
+            "p95_delta_ms": 0.20337700843811035,
+            "p95_overhead_percent": 0.6044457033741745
+          },
+          {
+            "seed": 6008,
+            "capture_off_episode_ids": [
+              "episode_20260731T130150086Z_bot_s6008_00"
+            ],
+            "capture_on_episode_ids": [
+              "episode_20260731T130216951Z_bot_s6008_00"
+            ],
+            "capture_off_median_ms": 33.33659842610359,
+            "capture_on_median_ms": 33.32290053367615,
+            "delta_ms": -0.013697892427444458,
+            "overhead_percent": -0.04108965243652028,
+            "capture_off_p95_ms": 33.67206230759621,
+            "capture_on_p95_ms": 34.01283919811249,
+            "p95_delta_ms": 0.34077689051628113,
+            "p95_overhead_percent": 1.0120463884963884
+          },
+          {
+            "seed": 6009,
+            "capture_off_episode_ids": [
+              "episode_20260731T130309949Z_bot_s6009_00"
+            ],
+            "capture_on_episode_ids": [
+              "episode_20260731T130243221Z_bot_s6009_00"
+            ],
+            "capture_off_median_ms": 33.334098756313324,
+            "capture_on_median_ms": 33.329300582408905,
+            "delta_ms": -0.004798173904418945,
+            "overhead_percent": -0.01439419118391552,
+            "capture_off_p95_ms": 33.693139255046844,
+            "capture_on_p95_ms": 33.76609981060028,
+            "p95_delta_ms": 0.07296055555343628,
+            "p95_overhead_percent": 0.21654424956115548
+          }
+        ]
+      }
     },
     "combat": {
       "contract": "one_bullet_outcome_ledger_v1",
-      "shots_fired": 5,
-      "shots_hit": 5,
+      "shots_fired": 25,
+      "shots_hit": 25,
       "shot_hit_rate": 1.0,
       "by_mode": {
         "bot": {
-          "shots_fired": 3,
-          "shots_hit": 3,
+          "shots_fired": 23,
+          "shots_hit": 23,
           "shot_hit_rate": 1.0
         },
         "human": {
@@ -69,23 +831,30 @@
   },
   "video_duration_s": 60.0,
   "artifacts_sha256": {
-    "README.md": "b3e02d7a8e54d3b39076f70ae7ab7c98aea4c782428b8f95844bbf0311481cee",
+    "ml_dataset_manifest.json": "3de1a7743c0a6628af2aa407ca771decfbbf4c9d0d83a147381ab3bae09899e4",
+    "pubg/0340a0db4df30089.json": "4dd065d80d5e1cbb0e5ce5b80d1d56482b669c6fae8586e2588df6416bf58240",
+    "README.md": "e44595f050ee371441517a6f4273c94600d7d37292d81a274f2b10f6fa7290ed",
     "reports/action_distributions.png": "1a34debd0b040e8e456e212e212fef27c174cb6fd2496a1d700ee9ee8cd26447",
-    "reports/capture_performance.png": "77cbe4e65e9a349f31dddb63b5bf3a2bbc6cef473a7df002713d23f5d7acc52a",
-    "reports/combat_ledger.png": "fd0bf662949aa74dca682274c9dca46f658e193f04b0643de9f951f9c8227184",
-    "reports/episode_outcomes.png": "0d8f756126b83d58e0ab3427709b72fb4e5d5d3a21bbfafeb2b88d772001cb7e",
-    "reports/episode_sizes.png": "500f1fa61a461b90960e3a932f12ec63af8a9b4a60584a5514b9f18251e70689",
+    "reports/capture_performance.png": "fafeac075b26eeb1b8cfa79453a614ac4501d3b45f689f7ed4a2293f6e781ece",
+    "reports/combat_ledger.png": "f96cca8aa737098f565b9a423c46bd9a7f131489ceddf995611c89e65e6c7d03",
+    "reports/episode_outcomes.png": "1ca56c95988743a0d1a8b64b146a9e2769755c20f17c1c60558f4e10c1277e56",
+    "reports/episode_sizes.png": "63b2ab7ff4360222a7ac74b2fe910e0f78dbff140d69894cbe1c7330fa26e82f",
     "reports/replay_error.png": "8133942c4533f43d57158b599077494c751fd72b1d025818307f51948077211d",
-    "reports/summary.json": "7c748b95b8f9052c061b792ee2d4dc5a6c8b1511ff652532a4ebd128d2f3db7d",
-    "reports/summary.md": "519619eb3908191e827387e082798992829fbb42c572b6f5c846647a4de3dc90",
-    "rgb_depth_pair.png": "d74a1c3b9db7a13d1819d39ea1d5e542ce3af005cc657397c96339411ceb413f",
-    "runtime_first_person.png": "ceeb4115948c019d70f427c5dc5ceeed5c861b6e028c71e77e36dd6012517feb",
-    "sample/depth.png": "7c819d5531c292d09ea8900fa9ce6b298b2676c4c2ca22273f89224d6222deea",
-    "sample/depth_preview.png": "49aed8f7fc416a0e72cfcd7211a7d738cf7726c6926e798210ffc15789855f73",
-    "sample/manifest.json": "a414586db8ba647b4e9a887f663837233224fe5bd10258fcd09b9e7a078ff156",
-    "sample/native_replay.replay": "6e373169b66232837a3dde617f9e0158d8aa48c362e926ce9916c5381ad055ab",
-    "sample/rgb.png": "ceeb4115948c019d70f427c5dc5ceeed5c861b6e028c71e77e36dd6012517feb",
-    "sample/trajectory_excerpt.jsonl": "fe1ed7e90bf2def480a9d6e896fa5f1e88f420b1c02031139a5b3ec7501b8da4",
-    "simtrace_demo.mp4": "11388666d1b1ef7c03fd7e3b2259359db071fd38ecea1a1d62663302e7c7e0dc"
+    "reports/summary.json": "7784bc428250741b890597b2e4e322d36912807ae9435c6123454c62db5b1f93",
+    "reports/summary.md": "4c7a439766576029ddc9bd9949f01407a65e8aa6bc116379d2d4f7095f4b0d7b",
+    "rgb_depth_pair.png": "23a4c2d0a9b17487778cc9199749c5741e2e836149726ba1fcea7385ed8dd2de",
+    "runtime_first_person.png": "8215fd328cad90510a6f85e2e3112531eee273c92e52de5840a30ab0fd352fc7",
+    "sample/depth.png": "0a7775afab1b4942ebb5a73b8dbe52ad57b299fd59a64f61a004bce44c6829b4",
+    "sample/depth_preview.png": "16a40bf6dc0ebbcc0c724415372c916819f80f1b2ed165899b3dbec7d8cfdb4c",
+    "sample/manifest.json": "6538387dafd8f4b09871be8defbde5503258d7cfdfebb157e8793aad2232260f",
+    "sample/native_replay.replay": "b6789613b34505f417640ced234081b13783aee9674b132ea45698275b96d34e",
+    "sample/rgb.png": "8215fd328cad90510a6f85e2e3112531eee273c92e52de5840a30ab0fd352fc7",
+    "sample/trajectory_excerpt.jsonl": "20a2d6f74f23d916146505a59d5ffe0047796d8d9ca771e8d64c5af6054883ec",
+    "simtrace_demo.mp4": "df91ad099f424d4f661390f5fbaf3f59983808a78a7da0cf439e1305fc9e08af"
+  },
+  "ml_dataset": {
+    "episode_count": 53,
+    "transition_count": 8895,
+    "sensor_policy_sample_count": 1827
   }
 }

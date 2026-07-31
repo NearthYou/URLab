@@ -1,11 +1,11 @@
 # Unreal SimTrace dataset report
 
-- Episodes: 40
-- Valid episodes: 40
+- Episodes: 60
+- Valid episodes: 60
 - Validation errors: 0
 - Missing capture frames: 0
 - Dropped captures: 0
-- Total size: 94.11 MiB
+- Total size: 129.52 MiB
 
 ## Episodes
 
@@ -51,6 +51,26 @@
 | episode_20260731T083425344Z_bot_s4343_00 | bot | 4343 | 165 | 55 | goal | 0 |
 | episode_20260731T091927349Z_bot_s5150_00 | bot | 5150 | 165 | 55 | goal | 0 |
 | episode_20260731T092009850Z_input-replay_s5150_00 | input-replay | 5150 | 165 | 55 | replay_source_end | 0 |
+| episode_20260731T125443784Z_bot_s6000_00 | bot | 6000 | 165 | 0 | goal | 0 |
+| episode_20260731T125513006Z_bot_s6000_00 | bot | 6000 | 165 | 55 | goal | 0 |
+| episode_20260731T125541146Z_bot_s6001_00 | bot | 6001 | 165 | 55 | goal | 0 |
+| episode_20260731T125607878Z_bot_s6001_00 | bot | 6001 | 165 | 0 | goal | 0 |
+| episode_20260731T125631969Z_bot_s6002_00 | bot | 6002 | 165 | 0 | goal | 0 |
+| episode_20260731T125656241Z_bot_s6002_00 | bot | 6002 | 165 | 55 | goal | 0 |
+| episode_20260731T125722459Z_bot_s6003_00 | bot | 6003 | 165 | 55 | goal | 0 |
+| episode_20260731T125748936Z_bot_s6003_00 | bot | 6003 | 165 | 0 | goal | 0 |
+| episode_20260731T125816008Z_bot_s6004_00 | bot | 6004 | 165 | 0 | goal | 0 |
+| episode_20260731T125842870Z_bot_s6004_00 | bot | 6004 | 165 | 55 | goal | 0 |
+| episode_20260731T125909811Z_bot_s6005_00 | bot | 6005 | 165 | 55 | goal | 0 |
+| episode_20260731T125936348Z_bot_s6005_00 | bot | 6005 | 165 | 0 | goal | 0 |
+| episode_20260731T130003198Z_bot_s6006_00 | bot | 6006 | 165 | 0 | goal | 0 |
+| episode_20260731T130029360Z_bot_s6006_00 | bot | 6006 | 165 | 55 | goal | 0 |
+| episode_20260731T130056189Z_bot_s6007_00 | bot | 6007 | 165 | 55 | goal | 0 |
+| episode_20260731T130123664Z_bot_s6007_00 | bot | 6007 | 165 | 0 | goal | 0 |
+| episode_20260731T130150086Z_bot_s6008_00 | bot | 6008 | 165 | 0 | goal | 0 |
+| episode_20260731T130216951Z_bot_s6008_00 | bot | 6008 | 165 | 55 | goal | 0 |
+| episode_20260731T130243221Z_bot_s6009_00 | bot | 6009 | 165 | 55 | goal | 0 |
+| episode_20260731T130309949Z_bot_s6009_00 | bot | 6009 | 165 | 0 | goal | 0 |
 
 ## Seed reproducibility
 
@@ -69,30 +89,48 @@
 | 4242 | 2 | pass |
 | 4343 | 1 | pass |
 | 5150 | 2 | pass |
+| 6000 | 2 | pass |
+| 6001 | 2 | pass |
+| 6002 | 2 | pass |
+| 6003 | 2 | pass |
+| 6004 | 2 | pass |
+| 6005 | 2 | pass |
+| 6006 | 2 | pass |
+| 6007 | 2 | pass |
+| 6008 | 2 | pass |
+| 6009 | 2 | pass |
 
 ## Action distributions
 
 | Mode | Samples | Move mean | Move p95 | Look mean | Look p95 | Jump rate | Fire rate | Collision rate |
 |---|---:|---:|---:|---:|---:|---:|---:|---:|
-| bot | 3795 | 1.000 | 1.000 | 0.811 | 2.000 | 7.30% | 0.08% | 0.61% |
+| bot | 7095 | 1.000 | 1.000 | 0.841 | 2.000 | 9.26% | 0.32% | 0.61% |
 | human | 1853 | 0.932 | 1.414 | 0.171 | 0.995 | 2.00% | 0.00% | 1.30% |
 | input-replay | 1174 | 1.001 | 1.414 | 0.658 | 2.000 | 6.47% | 0.17% | 0.94% |
 
 ## One Bullet Outcome Ledger
 
 - Contract: `one_bullet_outcome_ledger_v1`
-- Shots: 5
-- Hits: 5
+- Shots: 25
+- Hits: 25
 - Hit rate: 100.00%
 - Exact replay event matches: 2/2
 
 | Mode | Shots | Hits | Hit rate |
 |---|---:|---:|---:|
-| bot | 3 | 3 | 100.00% |
+| bot | 23 | 23 | 100.00% |
 | human | 0 | 0 | 0.00% |
 | input-replay | 2 | 2 | 100.00% |
 
 ## JSON replay comparisons
+
+- Comparisons: 7
+- Exact frame-aligned paths: 7/7
+- Same Unreal engine version: 7/7
+- Same Git revision: 7/7
+- Cross-host status: `not_tested`
+
+Exact matches are scoped to the recorded engine/build pairs; this does not claim cross-host determinism.
 
 | Replay | Frames | Mean cm | P95 cm | Final cm | Combat | Target |
 |---|---:|---:|---:|---:|---|---|
@@ -106,14 +144,45 @@
 
 ## Capture performance
 
+Primary evidence source: `registered_alternating_benchmark`
+
+The primary estimate uses benchmark registrations whose capture-off/on order alternates by seed.
+
+The simulation is paced at 30 Hz, so paired P95 frame time is the primary tail-cost metric. Pooled samples and paired medians are diagnostic only.
+
 | Metric | Capture off | Capture on |
 |---|---:|---:|
-| Samples | 1815 | 1980 |
-| Mean frame time ms | 37.691 | 36.754 |
-| Median frame time ms | 36.136 | 34.211 |
-| P95 frame time ms | 45.979 | 45.061 |
+| Samples | 3465 | 3630 |
+| Mean frame time ms | 35.543 | 35.134 |
+| Median frame time ms | 33.422 | 33.421 |
+| P95 frame time ms | 45.367 | 43.294 |
 
-Median FPS drop: -5.629%
+Paired course seeds: 10
+
+Median paired P95 delta (capture on - off): 0.089 ms
+
+Bootstrap 95% CI for paired P95 delta: [0.022, 0.341] ms
+
+Tail interpretation: `capture_tail_overhead_detected`
+
+Median frame-time delta (capture on - off): -0.004 ms
+
+Bootstrap 95% CI for median delta: [-0.014, 0.014] ms
+
+Median interpretation: `inconclusive`
+
+| Seed | Off P95 ms | On P95 ms | Delta ms | Overhead |
+|---:|---:|---:|---:|---:|
+| 6000 | 33.820 | 33.917 | 0.098 | 0.289% |
+| 6001 | 33.521 | 33.933 | 0.412 | 1.229% |
+| 6002 | 33.603 | 33.952 | 0.349 | 1.038% |
+| 6003 | 33.817 | 33.707 | -0.111 | -0.327% |
+| 6004 | 33.760 | 33.840 | 0.080 | 0.237% |
+| 6005 | 33.761 | 33.783 | 0.022 | 0.066% |
+| 6006 | 33.789 | 33.811 | 0.022 | 0.065% |
+| 6007 | 33.647 | 33.850 | 0.203 | 0.604% |
+| 6008 | 33.672 | 34.013 | 0.341 | 1.012% |
+| 6009 | 33.693 | 33.766 | 0.073 | 0.217% |
 
 ## Plots
 

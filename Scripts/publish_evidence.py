@@ -4,6 +4,7 @@ import argparse
 import hashlib
 import json
 import shutil
+import stat
 import subprocess
 import tempfile
 from datetime import UTC, datetime
@@ -13,6 +14,15 @@ from typing import Any
 
 import numpy as np
 from PIL import Image, ImageDraw, ImageFont, ImageOps
+
+if __package__:
+    from .export_ml_dataset import validate_dataset_index
+    from .pubg_telemetry import PubgTelemetryError, publish_summary
+    from .validate_dataset import benchmark_registry_sha256
+else:
+    from export_ml_dataset import validate_dataset_index
+    from pubg_telemetry import PubgTelemetryError, publish_summary
+    from validate_dataset import benchmark_registry_sha256
 
 
 PLOT_NAMES = (
@@ -35,6 +45,89 @@ REPORT_IDENTITY_FIELDS = (
     "trajectory_frames",
     "capture_frames",
     "capture_dropped",
+)
+PUBLIC_REPORT_FIELDS = (
+    "schema_version",
+    "episode_count",
+    "valid_episode_count",
+    "error_count",
+    "warning_count",
+    "modes",
+    "outcomes",
+    "total_bytes",
+    "missing_capture_frames",
+    "capture_dropped",
+    "seed_reproducibility",
+    "replay_comparisons",
+    "replay_evidence",
+    "action_metrics",
+    "combat",
+    "performance",
+    "plots",
+    "episodes",
+)
+PUBLIC_EPISODE_MANIFEST_FIELDS = (
+    "schema_version",
+    "episode_id",
+    "mode",
+    "seed",
+    "parent_episode_id",
+    "course_hash",
+    "start_position_cm",
+    "start_rotation_deg",
+    "goal_position_cm",
+    "target_position_cm",
+    "engine_version",
+    "git_revision",
+    "simulation_hz",
+    "capture_hz",
+    "capture_interval_sim_frames",
+    "capture_queue_capacity",
+    "image_width",
+    "image_height",
+    "sensor_type",
+    "depth_encoding",
+    "depth_max_cm",
+    "depth_decode_cm",
+    "trajectory_frames",
+    "capture_frames",
+    "capture_dropped",
+    "combat_contract",
+    "primary_target_id",
+    "shots_fired",
+    "shots_hit",
+    "shot_hit_rate",
+    "file_count",
+    "started_utc",
+    "duration_s",
+    "end_reason",
+    "replay_name",
+    "replay_archive_path",
+    "complete",
+    "total_bytes",
+)
+PUBLIC_TRAJECTORY_FIELDS = (
+    "schema_version",
+    "sim_frame",
+    "timestamp_s",
+    "delta_s",
+    "position_cm",
+    "rotation_deg",
+    "velocity_cm_s",
+    "goal_relative_cm",
+    "move_input",
+    "look_input",
+    "jump_pressed",
+    "fire_pressed",
+    "collision",
+    "captured",
+    "rgb_path",
+    "depth_path",
+    "capture_dropped",
+    "frame_time_ms",
+    "combat_events",
+    "done",
+    "end_reason",
 )
 
 
@@ -59,6 +152,16 @@ def _load_trajectory(path: Path) -> list[dict[str, Any]]:
     if not rows:
         raise ValueError(f"{path} is empty")
     return rows
+
+
+def _is_link_or_reparse(path: Path) -> bool:
+    try:
+        attributes = getattr(path.lstat(), "st_file_attributes", 0)
+    except OSError:
+        return False
+    return path.is_symlink() or bool(
+        attributes & getattr(stat, "FILE_ATTRIBUTE_REPARSE_POINT", 0)
+    )
 
 
 def _episode_manifests(episodes_root: Path) -> list[tuple[Path, dict[str, Any]]]:
@@ -99,8 +202,7 @@ def _verify_report_matches_episodes(
         missing = sorted(set(actual) - set(reported))
         extra = sorted(set(reported) - set(actual))
         raise ValueError(
-            "report does not match episode tree "
-            f"(missing={missing}, extra={extra})"
+            f"report does not match episode tree (missing={missing}, extra={extra})"
         )
     if summary.get("episode_count") != len(actual):
         raise ValueError("report episode_count does not match episode tree")
@@ -116,11 +218,22 @@ def _verify_report_matches_episodes(
         report_row = reported[episode_id]
         for field in REPORT_IDENTITY_FIELDS:
             if report_row.get(field) != manifest.get(field):
-                raise ValueError(
-                    f"report does not match {episode_id} field {field}"
-                )
+                raise ValueError(f"report does not match {episode_id} field {field}")
     if summary.get("modes") != actual_modes:
         raise ValueError("report modes do not match episode tree")
+
+    performance = summary.get("performance")
+    if not isinstance(performance, dict):
+        raise ValueError("report performance section is missing")
+    registered = performance.get("registered_benchmark")
+    if not isinstance(registered, dict):
+        raise ValueError("report registered benchmark section is missing")
+    design_errors = registered.get("design_errors")
+    if not isinstance(design_errors, list) or design_errors:
+        raise ValueError("report contains invalid benchmark registration")
+    episodes_root = episodes[0][0].parent
+    if registered.get("registry_sha256") != benchmark_registry_sha256(episodes_root):
+        raise ValueError("report benchmark registry is stale")
 
 
 def _captured_goal_episodes(
@@ -166,14 +279,41 @@ def _representative_episode(
 
 
 def _public_summary(summary: dict[str, Any]) -> dict[str, Any]:
-    public = dict(summary)
-    public.pop("episodes_root", None)
+    public = {
+        field: summary[field] for field in PUBLIC_REPORT_FIELDS if field in summary
+    }
     public["episodes"] = [
-        {key: value for key, value in episode.items() if key != "path"}
+        {
+            key: value
+            for key, value in episode.items()
+            if key not in {"path", "host_fingerprint"}
+        }
         for episode in summary.get("episodes", [])
         if isinstance(episode, dict)
     ]
+    public["replay_comparisons"] = [
+        {
+            key: value
+            for key, value in comparison.items()
+            if key
+            not in {
+                "frame_errors_cm",
+                "original_host_fingerprint",
+                "replayed_host_fingerprint",
+            }
+        }
+        for comparison in summary.get("replay_comparisons", [])
+        if isinstance(comparison, dict)
+    ]
     return public
+
+
+def _public_episode_manifest(manifest: dict[str, Any]) -> dict[str, Any]:
+    return {
+        field: manifest[field]
+        for field in PUBLIC_EPISODE_MANIFEST_FIELDS
+        if field in manifest
+    }
 
 
 def _trajectory_excerpt(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
@@ -181,12 +321,18 @@ def _trajectory_excerpt(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
     combat_indexes = [
         index
         for index, row in enumerate(rows)
-        if isinstance(row.get("combat_events"), list)
-        and len(row["combat_events"]) > 0
+        if isinstance(row.get("combat_events"), list) and len(row["combat_events"]) > 0
     ]
     if combat_indexes:
         indexes = sorted(set(indexes + [combat_indexes[0], combat_indexes[-1]]))
-    return [rows[index] for index in indexes]
+    return [
+        {
+            field: rows[index][field]
+            for field in PUBLIC_TRAJECTORY_FIELDS
+            if field in rows[index]
+        }
+        for index in indexes
+    ]
 
 
 def _depth_preview(source: Path, destination: Path) -> None:
@@ -214,9 +360,7 @@ def _font(size: int) -> ImageFont.FreeTypeFont | ImageFont.ImageFont:
 
 
 def _fit_image(image: Image.Image, size: tuple[int, int]) -> Image.Image:
-    result = ImageOps.contain(
-        image.convert("RGB"), size, Image.Resampling.LANCZOS
-    )
+    result = ImageOps.contain(image.convert("RGB"), size, Image.Resampling.LANCZOS)
     canvas = Image.new("RGB", size, (14, 19, 28))
     x = (size[0] - result.width) // 2
     y = (size[1] - result.height) // 2
@@ -439,14 +583,15 @@ def _write_evidence_readme(
 ) -> None:
     summary = evidence["summary"]
     modes = summary.get("modes", {})
-    human_episode_count = (
-        int(modes.get("human", 0)) if isinstance(modes, dict) else 0
-    )
+    human_episode_count = int(modes.get("human", 0)) if isinstance(modes, dict) else 0
     lines = [
         "# Recorded evidence",
         "",
         "This directory contains a compact, tracked extract of a real SimTrace run.",
-        "The full generated dataset remains under `Saved/SimTrace` and is ignored by Git.",
+        (
+            "The full generated dataset remains under `Saved/SimTrace` and is "
+            "ignored by Git."
+        ),
         "",
         f"- Source episode: `{evidence['source_episode_id']}`",
         f"- Git revision recorded by Unreal: `{evidence['git_revision']}`",
@@ -469,7 +614,10 @@ def _write_evidence_readme(
         "![RGB and depth from the same simulation frame](rgb_depth_pair.png)",
         "",
         "Raw files are in [`sample`](sample), including the original 16-bit depth PNG,",
-        "the episode manifest, a trajectory excerpt, and the native Replay archive when",
+        (
+            "the episode manifest, a trajectory excerpt, and the native Replay "
+            "archive when"
+        ),
         "one was present.",
         "",
         "## Reports",
@@ -486,11 +634,13 @@ def _write_evidence_readme(
                 "",
                 "## ML consumption contract",
                 "",
-                "- [ML dataset manifest](ml_dataset_manifest.json)",
+                "- [Verified ML dataset summary](ml_dataset_manifest.json)",
                 "",
-                "Only the validated counts, feature schema, causal alignment, "
-                "and seed-level split contract are published. Raw episodes and "
-                "generated training indexes remain under `Saved/SimTrace`.",
+                (
+                    "Only the validated counts, feature schema, causal alignment, "
+                    "and seed-level split contract are published. Raw episodes and "
+                    "generated training indexes remain under `Saved/SimTrace`."
+                ),
             ]
         )
     if has_video:
@@ -501,7 +651,10 @@ def _write_evidence_readme(
                 "",
                 f"[Open the MP4]({VIDEO_NAME})",
                 "",
-                "The reel is generated only from recorded RGB frames and report artifacts.",
+                (
+                    "The reel is generated only from recorded RGB frames and "
+                    "report artifacts."
+                ),
             ]
         )
     lines.append("")
@@ -520,41 +673,47 @@ def _write_evidence_readme(
     else:
         lines.append("No human-play episodes are included in this report.")
     lines.append("")
-    (output_root / "README.md").write_text(
-        "\n".join(lines), encoding="utf-8"
-    )
+    (output_root / "README.md").write_text("\n".join(lines), encoding="utf-8")
 
 
 def _publish_ml_dataset_manifest(
     episodes_root: Path, output_root: Path
 ) -> dict[str, Any] | None:
-    source_path = episodes_root.parent / "ml_dataset" / "dataset.json"
+    dataset_directory = episodes_root.parent / "ml_dataset"
+    source_path = dataset_directory / "dataset.json"
     if not source_path.is_file():
         return None
-    source = _load_json(source_path)
-    if source.get("complete") is not True:
-        raise ValueError(f"ML dataset manifest is incomplete: {source_path}")
-    for field in (
-        "episode_count",
-        "transition_count",
-        "sensor_policy_sample_count",
-    ):
-        value = source.get(field)
-        if isinstance(value, bool) or not isinstance(value, int) or value < 0:
-            raise ValueError(f"ML dataset manifest has invalid {field}")
-
-    public = {
-        key: value
-        for key, value in source.items()
-        if key not in {"source_episodes_root", "files"}
-    }
-    public.update(
-        {
-            "raw_episode_data_published": False,
-            "training_indexes_published": False,
-            "source_manifest_sha256": _sha256(source_path),
-        }
+    validated = validate_dataset_index(
+        dataset_directory,
+        expected_episodes_root=episodes_root,
     )
+    source = validated["manifest"]
+    public = {
+        "schema_version": 1,
+        "artifact_type": "simtrace_ml_dataset_summary",
+        "source_dataset_schema_version": source["schema_version"],
+        "dataset_type": source["dataset_type"],
+        "source_episode_count": source["source_episode_count"],
+        "source_manifest_set_sha256": source["source_manifest_set_sha256"],
+        "episode_count": source["episode_count"],
+        "excluded_episode_count": source["excluded_episode_count"],
+        "included_modes": source["included_modes"],
+        "transition_count": source["transition_count"],
+        "sensor_policy_sample_count": source["sensor_policy_sample_count"],
+        "state_features": source["state_features"],
+        "action_features": source["action_features"],
+        "split": source["split"],
+        "causal_alignment": source["causal_alignment"],
+        "sensor": source["sensor"],
+        "source_engine_versions": source["source_engine_versions"],
+        "source_git_revisions": source["source_git_revisions"],
+        "file_integrity": source["file_integrity"],
+        "generation_sha256": source["generation_sha256"],
+        "verified_complete": True,
+        "raw_episode_data_published": False,
+        "training_indexes_published": False,
+        "source_dataset_manifest_sha256": _sha256(source_path),
+    }
     (output_root / "ml_dataset_manifest.json").write_text(
         json.dumps(public, indent=2, ensure_ascii=False) + "\n",
         encoding="utf-8",
@@ -601,8 +760,7 @@ def _build_evidence_bundle(
     combat_rows = [
         row
         for row in rows
-        if isinstance(row.get("combat_events"), list)
-        and len(row["combat_events"]) > 0
+        if isinstance(row.get("combat_events"), list) and len(row["combat_events"]) > 0
     ]
     if combat_rows:
         combat_frame = int(combat_rows[0]["sim_frame"])
@@ -625,7 +783,15 @@ def _build_evidence_bundle(
     reports_output = output_root / "reports"
     sample_output.mkdir(parents=True, exist_ok=True)
     reports_output.mkdir(parents=True, exist_ok=True)
-    shutil.copy2(source_episode / "manifest.json", sample_output / "manifest.json")
+    (sample_output / "manifest.json").write_text(
+        json.dumps(
+            _public_episode_manifest(manifest),
+            indent=2,
+            ensure_ascii=False,
+        )
+        + "\n",
+        encoding="utf-8",
+    )
     shutil.copy2(rgb_source, sample_output / "rgb.png")
     shutil.copy2(depth_source, sample_output / "depth.png")
     _depth_preview(depth_source, sample_output / "depth_preview.png")
@@ -678,9 +844,9 @@ def _build_evidence_bundle(
     }
     evidence: dict[str, Any] = {
         "schema_version": 2,
-        "generated_utc": generated_at.astimezone(UTC).isoformat().replace(
-            "+00:00", "Z"
-        ),
+        "generated_utc": generated_at.astimezone(UTC)
+        .isoformat()
+        .replace("+00:00", "Z"),
         "source_episode_id": manifest["episode_id"],
         "source_sim_frame": int(sample_row["sim_frame"]),
         "git_revision": str(manifest["git_revision"]),
@@ -706,9 +872,7 @@ def _build_evidence_bundle(
         evidence["ml_dataset"] = {
             "episode_count": ml_manifest["episode_count"],
             "transition_count": ml_manifest["transition_count"],
-            "sensor_policy_sample_count": ml_manifest[
-                "sensor_policy_sample_count"
-            ],
+            "sensor_policy_sample_count": ml_manifest["sensor_policy_sample_count"],
         }
     _write_evidence_readme(
         output_root,
@@ -716,6 +880,11 @@ def _build_evidence_bundle(
         has_video=(output_root / VIDEO_NAME).is_file(),
         has_ml_manifest=ml_manifest is not None,
     )
+    _write_evidence_manifest(output_root, evidence)
+    return evidence
+
+
+def _write_evidence_manifest(output_root: Path, evidence: dict[str, Any]) -> None:
     artifact_files = sorted(
         path
         for path in output_root.rglob("*")
@@ -729,7 +898,35 @@ def _build_evidence_bundle(
         json.dumps(evidence, indent=2, ensure_ascii=False) + "\n",
         encoding="utf-8",
     )
-    return evidence
+
+
+def _preserve_public_pubg_summaries(source: Path, destination: Path) -> bool:
+    if not source.exists():
+        return False
+    if _is_link_or_reparse(source) or not source.is_dir():
+        raise ValueError("public PUBG evidence directory must be a regular directory")
+
+    entries = sorted(source.iterdir(), key=lambda path: path.name)
+    if not entries:
+        return False
+    destination.mkdir(parents=True)
+    for entry in entries:
+        if (
+            _is_link_or_reparse(entry)
+            or not entry.is_file()
+            or entry.suffix.lower() != ".json"
+            or entry.name in {".", ".."}
+        ):
+            raise ValueError(
+                f"public PUBG evidence contains an unsupported entry: {entry.name}"
+            )
+        try:
+            publish_summary(entry, destination / entry.name)
+        except PubgTelemetryError as error:
+            raise ValueError(
+                f"public PUBG evidence is not sanitized: {entry.name}: {error}"
+            ) from error
+    return True
 
 
 def publish_evidence(
@@ -741,8 +938,8 @@ def publish_evidence(
     generated_at: datetime | None = None,
 ) -> dict[str, Any]:
     output_root = output_root.absolute()
-    if output_root.is_symlink():
-        raise ValueError(f"output root must not be a symlink: {output_root}")
+    if _is_link_or_reparse(output_root):
+        raise ValueError(f"output root must not be a link: {output_root}")
     output_root = output_root.resolve()
     current_directory = Path.cwd().resolve()
     if output_root == current_directory or output_root in current_directory.parents:
@@ -759,6 +956,7 @@ def publish_evidence(
     ) as temporary:
         transaction_root = Path(temporary)
         staged_output = transaction_root / "bundle"
+        public_pubg = output_root / "pubg"
         evidence = _build_evidence_bundle(
             episodes_root,
             reports_root,
@@ -766,6 +964,8 @@ def publish_evidence(
             create_video=create_video,
             generated_at=generated_at,
         )
+        if _preserve_public_pubg_summaries(public_pubg, staged_output / "pubg"):
+            _write_evidence_manifest(staged_output, evidence)
 
         previous_output = transaction_root / "previous"
         had_previous_output = output_root.exists()

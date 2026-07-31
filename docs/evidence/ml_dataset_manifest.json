@@ -1,0 +1,120 @@
+{
+  "schema_version": 1,
+  "artifact_type": "simtrace_ml_dataset_summary",
+  "source_dataset_schema_version": 1,
+  "dataset_type": "simtrace_causal_transition_index",
+  "source_episode_count": 60,
+  "source_manifest_set_sha256": "2a21adffed0791598eadfc9fd13936bc4172cee8e2221b75817045b454f37eb5",
+  "episode_count": 53,
+  "excluded_episode_count": 7,
+  "included_modes": [
+    "bot",
+    "human"
+  ],
+  "transition_count": 8895,
+  "sensor_policy_sample_count": 1827,
+  "state_features": [
+    "position_x_cm",
+    "position_y_cm",
+    "position_z_cm",
+    "rotation_pitch_deg",
+    "rotation_yaw_deg",
+    "rotation_roll_deg",
+    "velocity_x_cm_s",
+    "velocity_y_cm_s",
+    "velocity_z_cm_s",
+    "goal_relative_x_cm",
+    "goal_relative_y_cm",
+    "goal_relative_z_cm"
+  ],
+  "action_features": [
+    "move_right",
+    "move_forward",
+    "look_yaw",
+    "look_pitch",
+    "jump_pressed",
+    "fire_pressed"
+  ],
+  "split": {
+    "unit": "seed",
+    "algorithm": "sha256(split_seed:course_seed) rank with 80/10/10 allocation",
+    "split_seed": 20260731,
+    "seed_assignments": {
+      "1000": "train",
+      "1001": "train",
+      "1002": "train",
+      "1003": "train",
+      "1004": "train",
+      "1005": "test",
+      "1006": "train",
+      "1007": "train",
+      "1008": "train",
+      "1009": "test",
+      "4242": "train",
+      "4343": "validation",
+      "5150": "train",
+      "6000": "train",
+      "6001": "validation",
+      "6002": "train",
+      "6003": "train",
+      "6004": "train",
+      "6005": "train",
+      "6006": "train",
+      "6007": "train",
+      "6008": "train",
+      "6009": "train"
+    },
+    "episode_counts": {
+      "test": 6,
+      "train": 44,
+      "validation": 3
+    },
+    "transition_counts": {
+      "test": 972,
+      "train": 7431,
+      "validation": 492
+    },
+    "sensor_policy_sample_counts": {
+      "test": 216,
+      "train": 1501,
+      "validation": 110
+    }
+  },
+  "causal_alignment": {
+    "observation": "PostPhysics state and sensor from frame t",
+    "action": "PrePhysics input applied at frame t+1",
+    "outcome": "PostPhysics state produced at frame t+1",
+    "same_frame_sensor_action_pairing": false
+  },
+  "sensor": {
+    "rgb": "320x180 RGB uint8",
+    "depth": "320x180 uint16 linear centimeters",
+    "depth_max_cm": 2000,
+    "invalid_depth_value": 0
+  },
+  "source_engine_versions": [
+    "5.8.1-56057345+++UE5+Release-5.8"
+  ],
+  "source_git_revisions": [
+    "4a349dc95d0f",
+    "70d27f71b60c",
+    "8832e13d3ce4",
+    "ad1c6bff321f",
+    "ff1b9a7bca35"
+  ],
+  "file_integrity": {
+    "transitions": {
+      "sha256": "b5a9b3ac8dd0d83b823645c8c9b9b325ec6cb99ca7a7799ae65973c10ef18594",
+      "record_count": 8895
+    },
+    "sensor_policy": {
+      "sha256": "3eb2aafec45dc49276473b09e4c3628bbee6451d705afff9ddc8a56ae8dd7bfc",
+      "record_count": 1827
+    }
+  },
+  "generation_sha256": "d960c04f15eb7d8c3c342c3226de6fd9f341baed34abb41e05d9833e67e33720",
+  "verified_complete": true,
+  "raw_episode_data_published": false,
+  "training_indexes_published": false,
+  "source_dataset_manifest_sha256": "05e826dcc758d0c1c815340048bab8a92d12b4cdc3d1bda8460f11318fd5ea59"
+}

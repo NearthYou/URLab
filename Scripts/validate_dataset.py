@@ -1,11 +1,15 @@
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import math
+import re
+import stat
 import statistics
 import sys
 from collections import Counter, defaultdict
+from datetime import datetime
 from pathlib import Path
 from typing import Any
 
@@ -36,6 +40,55 @@ VALID_END_REASONS = {
 }
 SUPPORTED_SCHEMA_VERSIONS = {1, 2}
 COMBAT_CONTRACT = "one_bullet_outcome_ledger_v1"
+CAPTURE_BENCHMARK_SCHEMA_VERSION = 1
+CAPTURE_BENCHMARK_METHOD = "paired capture on/off episode medians by course seed"
+
+
+def _is_link_or_reparse(path: Path) -> bool:
+    try:
+        attributes = getattr(path.lstat(), "st_file_attributes", 0)
+    except OSError:
+        return False
+    return path.is_symlink() or bool(
+        attributes & getattr(stat, "FILE_ATTRIBUTE_REPARSE_POINT", 0)
+    )
+
+
+def _parse_utc(value: object, label: str) -> datetime:
+    if not isinstance(value, str) or not value.endswith("Z"):
+        raise ValueError(f"{label} must be an ISO-8601 UTC timestamp")
+    try:
+        parsed = datetime.fromisoformat(value)
+    except ValueError as error:
+        raise ValueError(f"{label} must be an ISO-8601 UTC timestamp") from error
+    return parsed
+
+
+def benchmark_registry_sha256(episodes_root: Path | str) -> str:
+    episodes_root = Path(episodes_root).resolve()
+    benchmark_root = episodes_root.parent / "benchmarks"
+    digest = hashlib.sha256()
+    if not benchmark_root.is_dir():
+        return digest.hexdigest()
+    design_paths = sorted(
+        (
+            *benchmark_root.glob("*/design.json"),
+            *benchmark_root.glob("*/design.partial.json"),
+        ),
+        key=lambda path: path.relative_to(benchmark_root).as_posix(),
+    )
+    for design_path in design_paths:
+        relative = design_path.relative_to(benchmark_root).as_posix()
+        digest.update(relative.encode("utf-8"))
+        digest.update(b"\0")
+        if _is_link_or_reparse(design_path):
+            digest.update(b"LINK")
+        elif design_path.is_file():
+            digest.update(hashlib.sha256(design_path.read_bytes()).digest())
+        else:
+            digest.update(b"MISSING")
+        digest.update(b"\n")
+    return digest.hexdigest()
 
 
 def _load_json(path: Path) -> dict[str, Any]:
@@ -111,9 +164,7 @@ def _validate_combat_ledger(
 
     if not fire_pressed:
         if events:
-            errors.append(
-                f"frame {frame} has combat events without fire_pressed=true"
-            )
+            errors.append(f"frame {frame} has combat events without fire_pressed=true")
         return expected_shot_id, False, False
 
     if len(events) != 3 or any(not isinstance(event, dict) for event in events):
@@ -169,8 +220,7 @@ def _validate_combat_ledger(
         or float(distance) < 0
     ):
         errors.append(
-            f"frame {frame} combat distance_cm must be a non-negative "
-            "finite number"
+            f"frame {frame} combat distance_cm must be a non-negative finite number"
         )
 
     hit = outcome_name == "hit"
@@ -306,9 +356,8 @@ def validate_episode(episode: Path | str) -> dict[str, Any]:
     mode = manifest.get("mode")
     if not isinstance(mode, str) or mode not in VALID_MODES:
         errors.append("manifest mode is invalid")
-    if (
-        not isinstance(manifest.get("seed"), int)
-        or isinstance(manifest.get("seed"), bool)
+    if not isinstance(manifest.get("seed"), int) or isinstance(
+        manifest.get("seed"), bool
     ):
         errors.append("manifest seed must be an integer")
     if not isinstance(manifest.get("parent_episode_id"), str):
@@ -333,9 +382,8 @@ def validate_episode(episode: Path | str) -> dict[str, Any]:
             errors.append(f"manifest: {error}")
         if manifest.get("combat_contract") != COMBAT_CONTRACT:
             errors.append("manifest combat_contract is invalid")
-        if (
-            not isinstance(manifest.get("primary_target_id"), str)
-            or not manifest.get("primary_target_id")
+        if not isinstance(manifest.get("primary_target_id"), str) or not manifest.get(
+            "primary_target_id"
         ):
             errors.append("manifest primary_target_id must be a non-empty string")
     git_revision = manifest.get("git_revision")
@@ -399,18 +447,14 @@ def validate_episode(episode: Path | str) -> dict[str, Any]:
             or isinstance(frame, bool)
             or frame != expected_frame
         ):
-            errors.append(
-                f"trajectory frame {expected_frame} has sim_frame={frame}"
-            )
+            errors.append(f"trajectory frame {expected_frame} has sim_frame={frame}")
         timestamp = row.get("timestamp_s")
         expected_timestamp = expected_frame / simulation_hz
         if (
             isinstance(timestamp, bool)
             or not isinstance(timestamp, (int, float))
             or not math.isfinite(float(timestamp))
-            or not math.isclose(
-                float(timestamp), expected_timestamp, abs_tol=1e-5
-            )
+            or not math.isclose(float(timestamp), expected_timestamp, abs_tol=1e-5)
         ):
             errors.append(
                 f"frame {expected_frame} timestamp mismatch: "
@@ -426,8 +470,7 @@ def validate_episode(episode: Path | str) -> dict[str, Any]:
             or not math.isclose(float(delta), expected_delta, abs_tol=1e-5)
         ):
             errors.append(
-                f"frame {expected_frame} delta mismatch: "
-                f"{delta} != {expected_delta}"
+                f"frame {expected_frame} delta mismatch: {delta} != {expected_delta}"
             )
         if row.get("schema_version") != schema_version:
             errors.append(
@@ -500,9 +543,7 @@ def validate_episode(episode: Path | str) -> dict[str, Any]:
             stride = max(1, round(simulation_hz / capture_hz))
             if expected_frame % stride == 0 and not captured and not dropped:
                 missing_capture_count += 1
-                errors.append(
-                    f"expected capture at frame {expected_frame} is absent"
-                )
+                errors.append(f"expected capture at frame {expected_frame} is absent")
 
         try:
             move = _safe_vector(row, "move_input", 2)
@@ -569,9 +610,7 @@ def validate_episode(episode: Path | str) -> dict[str, Any]:
             errors.append("trajectory and manifest end_reason differ")
 
     if manifest.get("trajectory_frames") != len(rows):
-        errors.append(
-            "manifest trajectory_frames does not match trajectory.jsonl"
-        )
+        errors.append("manifest trajectory_frames does not match trajectory.jsonl")
     if manifest.get("capture_frames") != captured_count:
         errors.append("manifest capture_frames does not match trajectory.jsonl")
     if manifest.get("capture_dropped") != dropped_count:
@@ -608,8 +647,7 @@ def validate_episode(episode: Path | str) -> dict[str, Any]:
         errors.append("manifest duration_s does not match trajectory length")
 
     actual_rgb = {
-        path.relative_to(episode).as_posix()
-        for path in (episode / "rgb").glob("*.png")
+        path.relative_to(episode).as_posix() for path in (episode / "rgb").glob("*.png")
     }
     actual_depth = {
         path.relative_to(episode).as_posix()
@@ -722,9 +760,8 @@ def compare_episodes(
         and set(replayed_by_frame) == set(range(len(replayed_rows)))
         and original_by_frame.keys() == replayed_by_frame.keys()
     )
-    course_hash_match = (
-        original_manifest.get("course_hash")
-        == replayed_manifest.get("course_hash")
+    course_hash_match = original_manifest.get("course_hash") == replayed_manifest.get(
+        "course_hash"
     )
     original_engine_version = original_manifest.get("engine_version")
     replayed_engine_version = replayed_manifest.get("engine_version")
@@ -742,38 +779,22 @@ def compare_episodes(
         and replayed_host_fingerprint
         else None
     )
-    original_rows_by_frame = {
-        int(row["sim_frame"]): row for row in original_rows
-    }
-    replayed_rows_by_frame = {
-        int(row["sim_frame"]): row for row in replayed_rows
-    }
+    original_rows_by_frame = {int(row["sim_frame"]): row for row in original_rows}
+    replayed_rows_by_frame = {int(row["sim_frame"]): row for row in replayed_rows}
     combat_mismatch_frames = [
         frame
         for frame in shared_frames
         if {
-            "fire_pressed": original_rows_by_frame[frame].get(
-                "fire_pressed", False
-            ),
-            "combat_events": original_rows_by_frame[frame].get(
-                "combat_events", []
-            ),
+            "fire_pressed": original_rows_by_frame[frame].get("fire_pressed", False),
+            "combat_events": original_rows_by_frame[frame].get("combat_events", []),
         }
         != {
-            "fire_pressed": replayed_rows_by_frame[frame].get(
-                "fire_pressed", False
-            ),
-            "combat_events": replayed_rows_by_frame[frame].get(
-                "combat_events", []
-            ),
+            "fire_pressed": replayed_rows_by_frame[frame].get("fire_pressed", False),
+            "combat_events": replayed_rows_by_frame[frame].get("combat_events", []),
         }
     ]
-    missing_combat_frames = sorted(
-        original_by_frame.keys() ^ replayed_by_frame.keys()
-    )
-    combat_mismatch_frames = sorted(
-        set(combat_mismatch_frames + missing_combat_frames)
-    )
+    missing_combat_frames = sorted(original_by_frame.keys() ^ replayed_by_frame.keys())
+    combat_mismatch_frames = sorted(set(combat_mismatch_frames + missing_combat_frames))
     original_schema = original_manifest.get("schema_version")
     replayed_schema = replayed_manifest.get("schema_version")
     combat_event_applicable = (
@@ -784,9 +805,7 @@ def compare_episodes(
         and not isinstance(replayed_schema, bool)
         and replayed_schema >= 2
     )
-    combat_event_match = (
-        frame_alignment_match and not combat_mismatch_frames
-    )
+    combat_event_match = frame_alignment_match and not combat_mismatch_frames
     exact_path_match = frame_alignment_match and maximum_error == 0.0
     within_target = (
         seed_match
@@ -880,7 +899,7 @@ def _bootstrap_median_ci95(
 def paired_capture_performance(
     results: list[dict[str, Any]],
 ) -> dict[str, Any]:
-    episode_medians: dict[int, dict[str, list[tuple[str, float]]]] = defaultdict(
+    episode_stats: dict[int, dict[str, list[tuple[str, float, float]]]] = defaultdict(
         lambda: {"capture_off": [], "capture_on": []}
     )
     for result in results:
@@ -906,29 +925,30 @@ def paired_capture_performance(
         if len(finite_times) != len(frame_times):
             continue
         condition = (
-            "capture_on"
-            if float(result.get("_capture_hz", 0.0)) > 0
-            else "capture_off"
+            "capture_on" if float(result.get("_capture_hz", 0.0)) > 0 else "capture_off"
         )
-        episode_medians[seed][condition].append(
+        episode_stats[seed][condition].append(
             (
                 str(result.get("episode_id", "unknown")),
                 float(np.median(finite_times)),
+                float(np.percentile(finite_times, 95)),
             )
         )
 
     pairs: list[dict[str, Any]] = []
-    for seed, conditions in sorted(episode_medians.items()):
+    for seed, conditions in sorted(episode_stats.items()):
         capture_off = conditions["capture_off"]
         capture_on = conditions["capture_on"]
         if not capture_off or not capture_on:
             continue
-        off_median = float(np.median([value for _, value in capture_off]))
-        on_median = float(np.median([value for _, value in capture_on]))
+        off_median = float(np.median([item[1] for item in capture_off]))
+        on_median = float(np.median([item[1] for item in capture_on]))
+        off_p95 = float(np.median([item[2] for item in capture_off]))
+        on_p95 = float(np.median([item[2] for item in capture_on]))
         delta = on_median - off_median
-        overhead_percent = (
-            delta / off_median * 100.0 if off_median > 0 else None
-        )
+        p95_delta = on_p95 - off_p95
+        overhead_percent = delta / off_median * 100.0 if off_median > 0 else None
+        p95_overhead_percent = p95_delta / off_p95 * 100.0 if off_p95 > 0 else None
         pairs.append(
             {
                 "seed": seed,
@@ -938,16 +958,22 @@ def paired_capture_performance(
                 "capture_on_median_ms": on_median,
                 "delta_ms": delta,
                 "overhead_percent": overhead_percent,
+                "capture_off_p95_ms": off_p95,
+                "capture_on_p95_ms": on_p95,
+                "p95_delta_ms": p95_delta,
+                "p95_overhead_percent": p95_overhead_percent,
             }
         )
 
     deltas = [float(pair["delta_ms"]) for pair in pairs]
+    p95_deltas = [float(pair["p95_delta_ms"]) for pair in pairs]
     overheads = [
         float(pair["overhead_percent"])
         for pair in pairs
         if pair["overhead_percent"] is not None
     ]
     confidence_interval = _bootstrap_median_ci95(deltas)
+    p95_confidence_interval = _bootstrap_median_ci95(p95_deltas)
     if len(pairs) < 5:
         interpretation = "insufficient_pairs"
     elif confidence_interval is not None and confidence_interval[0] > 0:
@@ -957,17 +983,27 @@ def paired_capture_performance(
     else:
         interpretation = "inconclusive"
 
+    if len(pairs) < 5:
+        tail_interpretation = "insufficient_pairs"
+    elif p95_confidence_interval is not None and p95_confidence_interval[0] > 0:
+        tail_interpretation = "capture_tail_overhead_detected"
+    elif p95_confidence_interval is not None and p95_confidence_interval[1] < 0:
+        tail_interpretation = "capture_on_lower_tail_observed"
+    else:
+        tail_interpretation = "inconclusive"
+
     return {
-        "method": "paired episode medians grouped by course seed",
+        "method": "paired episode median and p95 frame times by course seed",
         "pairing_unit": "course_seed",
         "minimum_pairs_for_interpretation": 5,
         "pair_count": len(pairs),
         "median_delta_ms": float(np.median(deltas)) if deltas else None,
-        "median_overhead_percent": (
-            float(np.median(overheads)) if overheads else None
-        ),
+        "median_overhead_percent": (float(np.median(overheads)) if overheads else None),
         "bootstrap_ci95_delta_ms": confidence_interval,
         "interpretation": interpretation,
+        "median_p95_delta_ms": (float(np.median(p95_deltas)) if p95_deltas else None),
+        "bootstrap_ci95_p95_delta_ms": p95_confidence_interval,
+        "tail_interpretation": tail_interpretation,
         "pairs": pairs,
     }
 
@@ -984,25 +1020,76 @@ def _registered_capture_benchmark(
     }
     registered_results: list[dict[str, Any]] = []
     registered_episode_ids: set[str] = set()
+    registered_seeds: set[int] = set()
     design_ids: list[str] = []
     design_errors: list[str] = []
     declared_pair_count = 0
 
-    design_paths = (
-        sorted(benchmark_root.glob("*/design.json"))
-        if benchmark_root.is_dir()
-        else []
-    )
+    if benchmark_root.is_dir():
+        for partial_path in sorted(benchmark_root.glob("*/design.partial.json")):
+            design_errors.append(
+                f"{partial_path.parent.name}: design.partial.json remains"
+            )
+        design_paths = sorted(benchmark_root.glob("*/design.json"))
+    else:
+        design_paths = []
+
     for design_path in design_paths:
+        fallback_id = design_path.parent.name
+        if _is_link_or_reparse(design_path) or _is_link_or_reparse(design_path.parent):
+            design_errors.append(f"{fallback_id}: design path is a link")
+            continue
         try:
             design = _load_json(design_path)
         except (OSError, ValueError, json.JSONDecodeError) as error:
-            design_errors.append(f"{design_path.name}: {error}")
+            design_errors.append(f"{fallback_id}: {error}")
+            continue
+
+        expected_fields = {
+            "schema_version",
+            "benchmark_id",
+            "method",
+            "condition_order",
+            "pair_count",
+            "start_seed",
+            "git_revision",
+            "created_utc",
+            "complete",
+            "pairs",
+            "completed_utc",
+        }
+        if set(design) != expected_fields:
+            design_errors.append(f"{fallback_id}: design fields do not match schema")
+            continue
+        design_id = design.get("benchmark_id")
+        if not isinstance(design_id, str) or design_id != fallback_id:
+            design_errors.append(
+                f"{fallback_id}: benchmark_id does not match directory"
+            )
+            continue
+        if design.get("schema_version") != CAPTURE_BENCHMARK_SCHEMA_VERSION:
+            design_errors.append(f"{design_id}: schema_version is unsupported")
+            continue
+        if design.get("method") != CAPTURE_BENCHMARK_METHOD:
+            design_errors.append(f"{design_id}: method is unsupported")
             continue
         if design.get("complete") is not True:
+            design_errors.append(f"{design_id}: design is incomplete")
             continue
-        design_id = str(design.get("benchmark_id", design_path.parent.name))
-        design_ids.append(design_id)
+        try:
+            created_utc = _parse_utc(
+                design.get("created_utc"), f"{design_id}.created_utc"
+            )
+            completed_utc = _parse_utc(
+                design.get("completed_utc"), f"{design_id}.completed_utc"
+            )
+        except ValueError as error:
+            design_errors.append(str(error))
+            continue
+        if completed_utc < created_utc:
+            design_errors.append(f"{design_id}: completed_utc precedes created_utc")
+            continue
+
         pairs = design.get("pairs")
         if design.get("condition_order") != "alternating":
             design_errors.append(f"{design_id}: condition_order is not alternating")
@@ -1010,14 +1097,44 @@ def _registered_capture_benchmark(
         if not isinstance(pairs, list):
             design_errors.append(f"{design_id}: pairs must be an array")
             continue
-        if design.get("pair_count") != len(pairs):
+        pair_count = design.get("pair_count")
+        start_seed = design.get("start_seed")
+        git_revision = design.get("git_revision")
+        if (
+            isinstance(pair_count, bool)
+            or not isinstance(pair_count, int)
+            or pair_count < 1
+            or pair_count != len(pairs)
+        ):
             design_errors.append(f"{design_id}: pair_count does not match pairs")
             continue
-        declared_pair_count += len(pairs)
+        if isinstance(start_seed, bool) or not isinstance(start_seed, int):
+            design_errors.append(f"{design_id}: start_seed is invalid")
+            continue
+        if not isinstance(git_revision, str) or not re.fullmatch(
+            r"[0-9a-fA-F]{7,40}", git_revision
+        ):
+            design_errors.append(f"{design_id}: git_revision is invalid")
+            continue
+
+        local_errors: list[str] = []
+        local_results: list[tuple[str, dict[str, Any]]] = []
+        local_episode_ids: set[str] = set()
+        local_seeds: set[int] = set()
 
         for index, pair in enumerate(pairs):
             if not isinstance(pair, dict):
-                design_errors.append(f"{design_id}: pair {index} is not an object")
+                local_errors.append(f"{design_id}: pair {index} is not an object")
+                continue
+            if set(pair) != {
+                "seed",
+                "order",
+                "capture_off_episode_id",
+                "capture_on_episode_id",
+            }:
+                local_errors.append(
+                    f"{design_id}: pair {index} fields do not match schema"
+                )
                 continue
             expected_order = (
                 ["capture_off", "capture_on"]
@@ -1025,7 +1142,7 @@ def _registered_capture_benchmark(
                 else ["capture_on", "capture_off"]
             )
             if pair.get("order") != expected_order:
-                design_errors.append(
+                local_errors.append(
                     f"{design_id}: pair {index} order is not the expected "
                     "alternating order"
                 )
@@ -1040,12 +1157,28 @@ def _registered_capture_benchmark(
                 or not isinstance(on_id, str)
                 or off_id == on_id
             ):
-                design_errors.append(f"{design_id}: pair {index} identifiers are invalid")
+                local_errors.append(
+                    f"{design_id}: pair {index} identifiers are invalid"
+                )
+                continue
+            if seed != start_seed + index:
+                local_errors.append(f"{design_id}: pair {index} seed is not sequential")
+                continue
+            if seed in local_seeds or seed in registered_seeds:
+                local_errors.append(f"{design_id}: seed {seed} is duplicated")
+                continue
+            if (
+                off_id in local_episode_ids
+                or on_id in local_episode_ids
+                or off_id in registered_episode_ids
+                or on_id in registered_episode_ids
+            ):
+                local_errors.append(f"{design_id}: pair {index} reuses an episode_id")
                 continue
             off_result = result_by_id.get(off_id)
             on_result = result_by_id.get(on_id)
             if off_result is None or on_result is None:
-                design_errors.append(
+                local_errors.append(
                     f"{design_id}: pair {index} episode is missing from the report"
                 )
                 continue
@@ -1059,22 +1192,85 @@ def _registered_capture_benchmark(
                 or off_result.get("errors")
                 or on_result.get("errors")
             ):
-                design_errors.append(
-                    f"{design_id}: pair {index} does not match its registered conditions"
+                local_errors.append(
+                    f"{design_id}: pair {index} does not match its "
+                    "registered conditions"
                 )
                 continue
-            for episode_id, result in ((off_id, off_result), (on_id, on_result)):
-                if episode_id not in registered_episode_ids:
-                    registered_episode_ids.add(episode_id)
-                    registered_results.append(result)
+
+            off_manifest = off_result.get("_manifest")
+            on_manifest = on_result.get("_manifest")
+            if not isinstance(off_manifest, dict) or not isinstance(on_manifest, dict):
+                local_errors.append(
+                    f"{design_id}: pair {index} manifest is unavailable"
+                )
+                continue
+            if (
+                off_manifest.get("git_revision") != git_revision
+                or on_manifest.get("git_revision") != git_revision
+                or off_manifest.get("engine_version")
+                != on_manifest.get("engine_version")
+                or off_manifest.get("course_hash") != on_manifest.get("course_hash")
+            ):
+                local_errors.append(
+                    f"{design_id}: pair {index} build or course identity differs"
+                )
+                continue
+            try:
+                off_started = _parse_utc(
+                    off_manifest.get("started_utc"),
+                    f"{design_id}.pair[{index}].capture_off.started_utc",
+                )
+                on_started = _parse_utc(
+                    on_manifest.get("started_utc"),
+                    f"{design_id}.pair[{index}].capture_on.started_utc",
+                )
+            except ValueError as error:
+                local_errors.append(str(error))
+                continue
+            actual_order = (
+                ["capture_off", "capture_on"]
+                if off_started < on_started
+                else ["capture_on", "capture_off"]
+            )
+            if off_started == on_started or actual_order != expected_order:
+                local_errors.append(
+                    f"{design_id}: pair {index} timestamps contradict order"
+                )
+                continue
+
+            local_seeds.add(seed)
+            local_episode_ids.update((off_id, on_id))
+            local_results.extend(((off_id, off_result), (on_id, on_result)))
+
+        if local_errors:
+            design_errors.extend(local_errors)
+            continue
+        if len(local_seeds) != pair_count:
+            design_errors.append(
+                f"{design_id}: accepted pair count does not match pair_count"
+            )
+            continue
+
+        design_ids.append(design_id)
+        declared_pair_count += pair_count
+        registered_seeds.update(local_seeds)
+        for episode_id, result in local_results:
+            registered_episode_ids.add(episode_id)
+            registered_results.append(result)
 
     performance = paired_capture_performance(registered_results)
+    if performance["pair_count"] != declared_pair_count:
+        design_errors.append(
+            "accepted registered pair count does not match declared pair count"
+        )
     performance.update(
         {
             "design_count": len(design_ids),
             "design_ids": design_ids,
             "declared_pair_count": declared_pair_count,
             "design_errors": design_errors,
+            "registry_sha256": benchmark_registry_sha256(episodes_root),
             "evidence_level": "registered_alternating_benchmark",
         }
     )
@@ -1150,12 +1346,10 @@ def build_report(
             )
 
     host_identity_recorded_count = sum(
-        comparison["host_fingerprint_match"] is not None
-        for comparison in comparisons
+        comparison["host_fingerprint_match"] is not None for comparison in comparisons
     )
     cross_host_comparison_count = sum(
-        comparison["host_fingerprint_match"] is False
-        for comparison in comparisons
+        comparison["host_fingerprint_match"] is False for comparison in comparisons
     )
     if cross_host_comparison_count > 0:
         cross_host_status = "tested"
@@ -1194,28 +1388,18 @@ def build_report(
     action_metrics: dict[str, Any] = {}
     for mode in sorted(modes):
         matching = [result for result in results if result["mode"] == mode]
-        moves = [
-            value for result in matching for value in result["_move_magnitudes"]
-        ]
-        looks = [
-            value for result in matching for value in result["_look_magnitudes"]
-        ]
-        jumps = [
-            value for result in matching for value in result["_jump_values"]
-        ]
+        moves = [value for result in matching for value in result["_move_magnitudes"]]
+        looks = [value for result in matching for value in result["_look_magnitudes"]]
+        jumps = [value for result in matching for value in result["_jump_values"]]
         collisions = [
             value for result in matching for value in result["_collision_values"]
         ]
-        fires = [
-            value for result in matching for value in result["_fire_values"]
-        ]
+        fires = [value for result in matching for value in result["_fire_values"]]
         action_metrics[mode] = {
             "move_magnitude": _distribution(moves),
             "look_magnitude": _distribution(looks),
             "jump_rate": statistics.fmean(jumps) if jumps else 0.0,
-            "collision_rate": statistics.fmean(collisions)
-            if collisions
-            else 0.0,
+            "collision_rate": statistics.fmean(collisions) if collisions else 0.0,
             "fire_rate": statistics.fmean(fires) if fires else 0.0,
         }
 
@@ -1243,17 +1427,19 @@ def build_report(
         "shot_hit_rate": total_hits / total_shots if total_shots else 0.0,
         "by_mode": combat_by_mode,
         "replay_event_matches": sum(
-            comparison["combat_event_match"]
-            for comparison in combat_comparisons
+            comparison["combat_event_match"] for comparison in combat_comparisons
         ),
         "replay_event_comparisons": len(combat_comparisons),
     }
 
     capture_on, capture_off = bot_frame_times_by_capture(results)
     historical_performance = paired_capture_performance(results)
-    registered_performance = _registered_capture_benchmark(
-        episodes_root, results
-    )
+    registered_performance = _registered_capture_benchmark(episodes_root, results)
+    if registered_performance["design_errors"]:
+        raise ValueError(
+            "registered capture benchmark is invalid: "
+            + " | ".join(registered_performance["design_errors"])
+        )
     if registered_performance["pair_count"] > 0:
         primary_performance = registered_performance
         primary_source = "registered_alternating_benchmark"
@@ -1279,10 +1465,7 @@ def build_report(
     seed_reproducibility = {
         str(seed): {
             "episodes": len(group),
-            "course_hash_match": len(
-                {result["course_hash"] for result in group}
-            )
-            <= 1,
+            "course_hash_match": len({result["course_hash"] for result in group}) <= 1,
         }
         for seed, group in seed_groups.items()
     }
@@ -1298,7 +1481,12 @@ def build_report(
         {
             key: value
             for key, value in comparison.items()
-            if key != "frame_errors_cm"
+            if key
+            not in {
+                "frame_errors_cm",
+                "original_host_fingerprint",
+                "replayed_host_fingerprint",
+            }
         }
         for comparison in comparisons
     ]
@@ -1443,11 +1631,7 @@ def _write_markdown_summary(path: Path, summary: dict[str, Any]) -> None:
         ]
     )
     for comparison in summary["replay_comparisons"]:
-        combat_result = (
-            "pass"
-            if comparison["combat_event_match"]
-            else "fail"
-        )
+        combat_result = "pass" if comparison["combat_event_match"] else "fail"
         if not comparison["combat_event_applicable"]:
             combat_result = "n/a"
         lines.append(
@@ -1466,6 +1650,7 @@ def _write_markdown_summary(path: Path, summary: dict[str, Any]) -> None:
     capture_on = pooled["capture_on_ms"]
     paired = performance["paired_by_seed"]
     confidence_interval = paired["bootstrap_ci95_delta_ms"]
+    p95_confidence_interval = paired["bootstrap_ci95_p95_delta_ms"]
     lines.extend(
         [
             "",
@@ -1476,15 +1661,15 @@ def _write_markdown_summary(path: Path, summary: dict[str, Any]) -> None:
             (
                 "The primary estimate uses benchmark registrations whose "
                 "capture-off/on order alternates by seed."
-                if performance["primary_source"]
-                == "registered_alternating_benchmark"
+                if performance["primary_source"] == "registered_alternating_benchmark"
                 else "No registered alternating benchmark was found. The "
                 "historical seed pairs are diagnostic and do not establish "
                 "causal capture overhead."
             ),
             "",
-            "Pooled frame samples are shown as a diagnostic only. The estimate "
-            "below compares per-episode medians for the same course seed.",
+            "The simulation is paced at 30 Hz, so paired P95 frame time is the "
+            "primary tail-cost metric. Pooled samples and paired medians are "
+            "diagnostic only.",
             "",
             "| Metric | Capture off | Capture on |",
             "|---|---:|---:|",
@@ -1498,6 +1683,23 @@ def _write_markdown_summary(path: Path, summary: dict[str, Any]) -> None:
             "",
             f"Paired course seeds: {paired['pair_count']}",
             "",
+            "Median paired P95 delta (capture on - off): "
+            + (
+                f"{paired['median_p95_delta_ms']:.3f} ms"
+                if paired["median_p95_delta_ms"] is not None
+                else "not available"
+            ),
+            "",
+            "Bootstrap 95% CI for paired P95 delta: "
+            + (
+                f"[{p95_confidence_interval[0]:.3f}, "
+                f"{p95_confidence_interval[1]:.3f}] ms"
+                if p95_confidence_interval is not None
+                else "not available"
+            ),
+            "",
+            f"Tail interpretation: `{paired['tail_interpretation']}`",
+            "",
             "Median frame-time delta (capture on - off): "
             + (
                 f"{paired['median_delta_ms']:.3f} ms"
@@ -1507,24 +1709,23 @@ def _write_markdown_summary(path: Path, summary: dict[str, Any]) -> None:
             "",
             "Bootstrap 95% CI for median delta: "
             + (
-                f"[{confidence_interval[0]:.3f}, "
-                f"{confidence_interval[1]:.3f}] ms"
+                f"[{confidence_interval[0]:.3f}, {confidence_interval[1]:.3f}] ms"
                 if confidence_interval is not None
                 else "not available"
             ),
             "",
-            f"Interpretation: `{paired['interpretation']}`",
+            f"Median interpretation: `{paired['interpretation']}`",
             "",
-            "| Seed | Off median ms | On median ms | Delta ms | Overhead |",
+            "| Seed | Off P95 ms | On P95 ms | Delta ms | Overhead |",
             "|---:|---:|---:|---:|---:|",
         ]
     )
     for pair in paired["pairs"]:
-        overhead = pair["overhead_percent"]
+        overhead = pair["p95_overhead_percent"]
         lines.append(
-            f"| {pair['seed']} | {pair['capture_off_median_ms']:.3f} | "
-            f"{pair['capture_on_median_ms']:.3f} | "
-            f"{pair['delta_ms']:.3f} | "
+            f"| {pair['seed']} | {pair['capture_off_p95_ms']:.3f} | "
+            f"{pair['capture_on_p95_ms']:.3f} | "
+            f"{pair['p95_delta_ms']:.3f} | "
             + (f"{overhead:.3f}% |" if overhead is not None else "n/a |")
         )
     lines.extend(
@@ -1551,9 +1752,7 @@ def _write_markdown_summary(path: Path, summary: dict[str, Any]) -> None:
 
 
 def _validate_command(path: Path) -> int:
-    if (path / "manifest.json").exists() or (
-        path / "manifest.partial.json"
-    ).exists():
+    if (path / "manifest.json").exists() or (path / "manifest.partial.json").exists():
         results = [validate_episode(path)]
     else:
         results = [
@@ -1569,9 +1768,7 @@ def _validate_command(path: Path) -> int:
     return 1 if any(result["errors"] for result in results) else 0
 
 
-def _compare_command(
-    original: Path, replayed: Path, output: Path | None
-) -> int:
+def _compare_command(original: Path, replayed: Path, output: Path | None) -> int:
     metrics = compare_episodes(original, replayed)
     if output:
         output.parent.mkdir(parents=True, exist_ok=True)
