@@ -1,11 +1,11 @@
 # Unreal SimTrace dataset report
 
-- Episodes: 23
-- Valid episodes: 23
+- Episodes: 35
+- Valid episodes: 35
 - Validation errors: 0
 - Missing capture frames: 0
 - Dropped captures: 0
-- Total size: 37.84 MiB
+- Total size: 83.54 MiB
 
 ## Episodes
 
@@ -34,28 +34,41 @@
 | episode_20260730T165021898Z_input-replay_s1000_00 | input-replay | 1000 | 165 | 0 | replay_source_end | 0 |
 | episode_20260730T165047652Z_input-replay_s1001_00 | input-replay | 1001 | 165 | 0 | replay_source_end | 0 |
 | episode_20260730T165115218Z_input-replay_s1002_00 | input-replay | 1002 | 165 | 0 | replay_source_end | 0 |
+| episode_20260731T044221731Z_human_s1000_00 | human | 1000 | 179 | 60 | goal | 0 |
+| episode_20260731T044336494Z_human_s1001_00 | human | 1001 | 382 | 128 | goal | 0 |
+| episode_20260731T044350176Z_human_s1002_01 | human | 1002 | 159 | 53 | goal | 0 |
+| episode_20260731T044356310Z_human_s1003_02 | human | 1003 | 192 | 64 | goal | 0 |
+| episode_20260731T044403543Z_human_s1004_03 | human | 1004 | 165 | 55 | goal | 0 |
+| episode_20260731T044409877Z_human_s1005_04 | human | 1005 | 148 | 50 | goal | 0 |
+| episode_20260731T044415643Z_human_s1006_05 | human | 1006 | 160 | 54 | goal | 0 |
+| episode_20260731T044421810Z_human_s1007_06 | human | 1007 | 150 | 50 | goal | 0 |
+| episode_20260731T044427643Z_human_s1008_07 | human | 1008 | 148 | 50 | goal | 0 |
+| episode_20260731T044433410Z_human_s1009_08 | human | 1009 | 170 | 57 | goal | 0 |
+| episode_20260731T044715442Z_input-replay_s1009_00 | input-replay | 1009 | 170 | 0 | replay_source_end | 0 |
+| episode_20260731T045446201Z_input-replay_s1000_00 | input-replay | 1000 | 179 | 0 | replay_source_end | 0 |
 
 ## Seed reproducibility
 
 | Seed | Episodes | Course hash match |
 |---:|---:|---|
-| 1000 | 3 | pass |
-| 1001 | 3 | pass |
-| 1002 | 3 | pass |
-| 1003 | 2 | pass |
-| 1004 | 2 | pass |
-| 1005 | 2 | pass |
-| 1006 | 2 | pass |
-| 1007 | 2 | pass |
-| 1008 | 2 | pass |
-| 1009 | 2 | pass |
+| 1000 | 5 | pass |
+| 1001 | 4 | pass |
+| 1002 | 4 | pass |
+| 1003 | 3 | pass |
+| 1004 | 3 | pass |
+| 1005 | 3 | pass |
+| 1006 | 3 | pass |
+| 1007 | 3 | pass |
+| 1008 | 3 | pass |
+| 1009 | 4 | pass |
 
 ## Action distributions
 
 | Mode | Samples | Move mean | Move p95 | Look mean | Look p95 | Jump rate | Collision rate |
 |---|---:|---:|---:|---:|---:|---:|---:|
 | bot | 3300 | 1.000 | 1.000 | 0.801 | 2.000 | 6.67% | 0.61% |
-| input-replay | 495 | 1.000 | 1.000 | 0.801 | 2.000 | 6.67% | 0.61% |
+| human | 1853 | 0.932 | 1.414 | 0.171 | 0.995 | 2.00% | 1.30% |
+| input-replay | 844 | 1.001 | 1.414 | 0.573 | 2.000 | 4.50% | 1.07% |
 
 ## JSON replay comparisons
 
@@ -64,6 +77,8 @@
 | episode_20260730T165021898Z_input-replay_s1000_00 | 165 | 0.000 | 0.000 | 0.000 | pass |
 | episode_20260730T165047652Z_input-replay_s1001_00 | 165 | 0.000 | 0.000 | 0.000 | pass |
 | episode_20260730T165115218Z_input-replay_s1002_00 | 165 | 0.000 | 0.000 | 0.000 | pass |
+| episode_20260731T044715442Z_input-replay_s1009_00 | 170 | 0.000 | 0.000 | 0.000 | pass |
+| episode_20260731T045446201Z_input-replay_s1000_00 | 179 | 0.000 | 0.000 | 0.000 | pass |
 
 ## Capture performance
 
