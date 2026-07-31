@@ -24,6 +24,8 @@ public:
 private:
 	FSimTraceRuntimeConfig RuntimeConfig;
 	FDelegateHandle ReplayCompleteHandle;
+	FTimerHandle ReplayCameraRetryHandle;
 
 	void HandleReplayPlaybackComplete(UWorld* ReplayWorld);
+	void TryAttachReplayCamera();
 };

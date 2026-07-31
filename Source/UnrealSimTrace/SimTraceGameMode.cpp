@@ -15,6 +15,7 @@
 #include "SimTraceGameInstance.h"
 #include "SimTraceHUD.h"
 #include "SimTracePlayerController.h"
+#include "SimTraceReplaySpectatorController.h"
 #include "EpisodeRecorderComponent.h"
 #include "TimerManager.h"
 #include "UnrealSimTrace.h"
@@ -30,6 +31,7 @@ ASimTraceGameMode::ASimTraceGameMode()
 	PrimaryActorTick.TickGroup = TG_PostPhysics;
 	DefaultPawnClass = ASimTraceCharacter::StaticClass();
 	PlayerControllerClass = ASimTracePlayerController::StaticClass();
+	ReplaySpectatorPlayerControllerClass = ASimTraceReplaySpectatorController::StaticClass();
 	HUDClass = ASimTraceHUD::StaticClass();
 
 	Recorder = CreateDefaultSubobject<UEpisodeRecorderComponent>(TEXT("EpisodeRecorder"));
