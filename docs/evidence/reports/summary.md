@@ -1,11 +1,11 @@
 # Unreal SimTrace dataset report
 
-- Episodes: 35
-- Valid episodes: 35
+- Episodes: 40
+- Valid episodes: 40
 - Validation errors: 0
 - Missing capture frames: 0
 - Dropped captures: 0
-- Total size: 83.54 MiB
+- Total size: 94.11 MiB
 
 ## Episodes
 
@@ -46,6 +46,11 @@
 | episode_20260731T044433410Z_human_s1009_08 | human | 1009 | 170 | 57 | goal | 0 |
 | episode_20260731T044715442Z_input-replay_s1009_00 | input-replay | 1009 | 170 | 0 | replay_source_end | 0 |
 | episode_20260731T045446201Z_input-replay_s1000_00 | input-replay | 1000 | 179 | 0 | replay_source_end | 0 |
+| episode_20260731T081828574Z_bot_s4242_00 | bot | 4242 | 165 | 0 | goal | 0 |
+| episode_20260731T081916738Z_input-replay_s4242_00 | input-replay | 4242 | 165 | 0 | replay_source_end | 0 |
+| episode_20260731T083425344Z_bot_s4343_00 | bot | 4343 | 165 | 55 | goal | 0 |
+| episode_20260731T091927349Z_bot_s5150_00 | bot | 5150 | 165 | 55 | goal | 0 |
+| episode_20260731T092009850Z_input-replay_s5150_00 | input-replay | 5150 | 165 | 55 | replay_source_end | 0 |
 
 ## Seed reproducibility
 
@@ -61,35 +66,54 @@
 | 1007 | 3 | pass |
 | 1008 | 3 | pass |
 | 1009 | 4 | pass |
+| 4242 | 2 | pass |
+| 4343 | 1 | pass |
+| 5150 | 2 | pass |
 
 ## Action distributions
 
-| Mode | Samples | Move mean | Move p95 | Look mean | Look p95 | Jump rate | Collision rate |
-|---|---:|---:|---:|---:|---:|---:|---:|
-| bot | 3300 | 1.000 | 1.000 | 0.801 | 2.000 | 6.67% | 0.61% |
-| human | 1853 | 0.932 | 1.414 | 0.171 | 0.995 | 2.00% | 1.30% |
-| input-replay | 844 | 1.001 | 1.414 | 0.573 | 2.000 | 4.50% | 1.07% |
+| Mode | Samples | Move mean | Move p95 | Look mean | Look p95 | Jump rate | Fire rate | Collision rate |
+|---|---:|---:|---:|---:|---:|---:|---:|---:|
+| bot | 3795 | 1.000 | 1.000 | 0.811 | 2.000 | 7.30% | 0.08% | 0.61% |
+| human | 1853 | 0.932 | 1.414 | 0.171 | 0.995 | 2.00% | 0.00% | 1.30% |
+| input-replay | 1174 | 1.001 | 1.414 | 0.658 | 2.000 | 6.47% | 0.17% | 0.94% |
+
+## One Bullet Outcome Ledger
+
+- Contract: `one_bullet_outcome_ledger_v1`
+- Shots: 5
+- Hits: 5
+- Hit rate: 100.00%
+- Exact replay event matches: 2/2
+
+| Mode | Shots | Hits | Hit rate |
+|---|---:|---:|---:|
+| bot | 3 | 3 | 100.00% |
+| human | 0 | 0 | 0.00% |
+| input-replay | 2 | 2 | 100.00% |
 
 ## JSON replay comparisons
 
-| Replay | Frames | Mean cm | P95 cm | Final cm | Target |
-|---|---:|---:|---:|---:|---|
-| episode_20260730T165021898Z_input-replay_s1000_00 | 165 | 0.000 | 0.000 | 0.000 | pass |
-| episode_20260730T165047652Z_input-replay_s1001_00 | 165 | 0.000 | 0.000 | 0.000 | pass |
-| episode_20260730T165115218Z_input-replay_s1002_00 | 165 | 0.000 | 0.000 | 0.000 | pass |
-| episode_20260731T044715442Z_input-replay_s1009_00 | 170 | 0.000 | 0.000 | 0.000 | pass |
-| episode_20260731T045446201Z_input-replay_s1000_00 | 179 | 0.000 | 0.000 | 0.000 | pass |
+| Replay | Frames | Mean cm | P95 cm | Final cm | Combat | Target |
+|---|---:|---:|---:|---:|---|---|
+| episode_20260730T165021898Z_input-replay_s1000_00 | 165 | 0.000 | 0.000 | 0.000 | n/a | pass |
+| episode_20260730T165047652Z_input-replay_s1001_00 | 165 | 0.000 | 0.000 | 0.000 | n/a | pass |
+| episode_20260730T165115218Z_input-replay_s1002_00 | 165 | 0.000 | 0.000 | 0.000 | n/a | pass |
+| episode_20260731T044715442Z_input-replay_s1009_00 | 170 | 0.000 | 0.000 | 0.000 | n/a | pass |
+| episode_20260731T045446201Z_input-replay_s1000_00 | 179 | 0.000 | 0.000 | 0.000 | n/a | pass |
+| episode_20260731T081916738Z_input-replay_s4242_00 | 165 | 0.000 | 0.000 | 0.000 | pass | pass |
+| episode_20260731T092009850Z_input-replay_s5150_00 | 165 | 0.000 | 0.000 | 0.000 | pass | pass |
 
 ## Capture performance
 
 | Metric | Capture off | Capture on |
 |---|---:|---:|
-| Samples | 1650 | 1650 |
-| Mean frame time ms | 37.912 | 37.416 |
-| Median frame time ms | 36.619 | 36.105 |
-| P95 frame time ms | 46.001 | 45.424 |
+| Samples | 1815 | 1980 |
+| Mean frame time ms | 37.691 | 36.754 |
+| Median frame time ms | 36.136 | 34.211 |
+| P95 frame time ms | 45.979 | 45.061 |
 
-Median FPS drop: -1.422%
+Median FPS drop: -5.629%
 
 ## Plots
 
@@ -98,6 +122,8 @@ Median FPS drop: -1.422%
 ![Episode Outcomes](episode_outcomes.png)
 
 ![Action Distributions](action_distributions.png)
+
+![Combat Ledger](combat_ledger.png)
 
 ![Replay Error](replay_error.png)
 

@@ -1,10 +1,10 @@
 {
-	"schema_version": 1,
-	"episode_id": "episode_20260730T164634194Z_bot_s1000_00",
+	"schema_version": 2,
+	"episode_id": "episode_20260731T091927349Z_bot_s5150_00",
 	"mode": "bot",
-	"seed": 1000,
+	"seed": 5150,
 	"parent_episode_id": "",
-	"course_hash": "2960b24b",
+	"course_hash": "633e6795",
 	"start_position_cm": [
 		100,
 		0,
@@ -20,8 +20,13 @@
 		0,
 		100
 	],
+	"target_position_cm": [
+		2940,
+		0,
+		170
+	],
 	"engine_version": "5.8.1-56057345+++UE5+Release-5.8",
-	"git_revision": "ff1b9a7bca35",
+	"git_revision": "4a349dc95d0f",
 	"simulation_hz": 30,
 	"capture_hz": 10,
 	"capture_interval_sim_frames": 3,
@@ -35,12 +40,17 @@
 	"trajectory_frames": 165,
 	"capture_frames": 55,
 	"capture_dropped": 0,
+	"combat_contract": "one_bullet_outcome_ledger_v1",
+	"primary_target_id": "target_alpha",
+	"shots_fired": 1,
+	"shots_hit": 1,
+	"shot_hit_rate": 1,
 	"file_count": 113,
-	"total_bytes": 3820615,
-	"started_utc": "2026-07-30T16:46:34.194Z",
+	"started_utc": "2026-07-31T09:19:27.349Z",
 	"duration_s": 5.5,
 	"end_reason": "goal",
-	"replay_name": "simtrace_episode_20260730T164634194Z_bot_s1000_00",
-	"replay_archive_path": "replay/simtrace_episode_20260730T164634194Z_bot_s1000_00.replay",
-	"complete": true
+	"replay_name": "simtrace_episode_20260731T091927349Z_bot_s5150_00",
+	"replay_archive_path": "replay/simtrace_episode_20260731T091927349Z_bot_s5150_00.replay",
+	"complete": true,
+	"total_bytes": 3576097
 }

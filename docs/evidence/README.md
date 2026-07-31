@@ -3,12 +3,13 @@
 This directory contains a compact, tracked extract of a real SimTrace run.
 The full generated dataset remains under `Saved/SimTrace` and is ignored by Git.
 
-- Source episode: `episode_20260730T164634194Z_bot_s1000_00`
-- Git revision recorded by Unreal: `ff1b9a7bca35`
-- Valid episodes: 35
+- Source episode: `episode_20260731T091927349Z_bot_s5150_00`
+- Git revision recorded by Unreal: `4a349dc95d0f`
+- Valid episodes: 40
 - Missing captures: 0
 - Capture drops: 0
-- Replay comparisons: 5
+- Replay comparisons: 7
+- Source combat ledger: 1 shot, 1 hit
 
 ## Runtime view
 
@@ -26,6 +27,7 @@ one was present.
 
 - [Validation summary](reports/summary.md)
 - [Machine-readable summary](reports/summary.json)
+- [Combat ledger plot](reports/combat_ledger.png)
 - [Replay error plot](reports/replay_error.png)
 - [Capture performance plot](reports/capture_performance.png)
 

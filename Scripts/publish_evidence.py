@@ -148,6 +148,23 @@ def _captured_goal_episodes(
     return candidates
 
 
+def _representative_episode(
+    candidates: list[tuple[Path, dict[str, Any]]],
+) -> tuple[Path, dict[str, Any]]:
+    combat_candidates = [
+        candidate
+        for candidate in candidates
+        if int(candidate[1].get("schema_version", 0)) >= 2
+        and int(candidate[1].get("shots_fired", 0)) > 0
+    ]
+    if combat_candidates:
+        return max(
+            combat_candidates,
+            key=lambda item: str(item[1].get("episode_id", item[0].name)),
+        )
+    return candidates[0]
+
+
 def _public_summary(summary: dict[str, Any]) -> dict[str, Any]:
     public = dict(summary)
     public.pop("episodes_root", None)
@@ -161,6 +178,14 @@ def _public_summary(summary: dict[str, Any]) -> dict[str, Any]:
 
 def _trajectory_excerpt(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
     indexes = sorted({0, len(rows) // 2, len(rows) - 1})
+    combat_indexes = [
+        index
+        for index, row in enumerate(rows)
+        if isinstance(row.get("combat_events"), list)
+        and len(row["combat_events"]) > 0
+    ]
+    if combat_indexes:
+        indexes = sorted(set(indexes + [combat_indexes[0], combat_indexes[-1]]))
     return [rows[index] for index in indexes]
 
 
@@ -428,6 +453,11 @@ def _write_evidence_readme(
         f"- Missing captures: {summary['missing_capture_frames']}",
         f"- Capture drops: {summary['capture_dropped']}",
         f"- Replay comparisons: {summary['replay_comparison_count']}",
+        (
+            "- Source combat ledger: "
+            f"{evidence['source_shots_fired']} shot, "
+            f"{evidence['source_shots_hit']} hit"
+        ),
         "",
         "## Runtime view",
         "",
@@ -445,6 +475,7 @@ def _write_evidence_readme(
         "",
         "- [Validation summary](reports/summary.md)",
         "- [Machine-readable summary](reports/summary.json)",
+        "- [Combat ledger plot](reports/combat_ledger.png)",
         "- [Replay error plot](reports/replay_error.png)",
         "- [Capture performance plot](reports/capture_performance.png)",
     ]
@@ -505,7 +536,7 @@ def _build_evidence_bundle(
     episodes = _episode_manifests(episodes_root)
     _verify_report_matches_episodes(summary, episodes)
     captured_episodes = _captured_goal_episodes(episodes)
-    source_episode, manifest = captured_episodes[0]
+    source_episode, manifest = _representative_episode(captured_episodes)
     rows = _load_trajectory(source_episode / "trajectory.jsonl")
     captured_rows = [
         row
@@ -516,7 +547,24 @@ def _build_evidence_bundle(
     ]
     if not captured_rows:
         raise ValueError("representative episode has no captured trajectory row")
-    sample_row = captured_rows[len(captured_rows) // 2]
+    combat_rows = [
+        row
+        for row in rows
+        if isinstance(row.get("combat_events"), list)
+        and len(row["combat_events"]) > 0
+    ]
+    if combat_rows:
+        combat_frame = int(combat_rows[0]["sim_frame"])
+        sample_row = min(
+            captured_rows,
+            key=lambda row: (
+                abs(int(row["sim_frame"]) - combat_frame),
+                int(row["sim_frame"]),
+            ),
+        )
+    else:
+        combat_frame = None
+        sample_row = captured_rows[len(captured_rows) // 2]
     rgb_source = source_episode / str(sample_row["rgb_path"])
     depth_source = source_episode / str(sample_row["depth_path"])
     if not rgb_source.is_file() or not depth_source.is_file():
@@ -578,7 +626,7 @@ def _build_evidence_bundle(
         "combat": summary.get("combat", {}),
     }
     evidence: dict[str, Any] = {
-        "schema_version": 1,
+        "schema_version": 2,
         "generated_utc": generated_at.astimezone(UTC).isoformat().replace(
             "+00:00", "Z"
         ),
@@ -586,6 +634,9 @@ def _build_evidence_bundle(
         "source_sim_frame": int(sample_row["sim_frame"]),
         "git_revision": str(manifest["git_revision"]),
         "course_hash": str(manifest["course_hash"]),
+        "source_shots_fired": int(manifest.get("shots_fired", 0)),
+        "source_shots_hit": int(manifest.get("shots_hit", 0)),
+        "source_combat_sim_frame": combat_frame,
         "summary": compact_summary,
         "video_duration_s": None,
         "artifacts_sha256": {},

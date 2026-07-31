@@ -7,32 +7,36 @@ Unreal SimTrace는 Unreal 플레이를 재현 가능한 AI 연구 데이터로 �
 ## 구현 상태
 
 자동화 가능한 범위는 구현과 검증을 완료했다. 아래 수치와 파일은 manifest에
-기록된 런타임 revision `ff1b9a7bca35`, `8832e13d3ce4`에서 수집한 실제 실행 결과다.
+기록된 런타임 revision `ff1b9a7bca35`, `8832e13d3ce4`, `70d27f71b60c`,
+`4a349dc95d0f`에서 수집한 실제 실행 결과다. 최신 대표 sample은 전투 기능
+커밋 `4a349dc95d0f`에서 다시 수집했다.
 
 | 항목 | 현재 결과 |
 |---|---:|
 | 사람 플레이 수집 | 10회 모두 goal |
-| 센서 포함 봇 수집 | 10회 모두 goal |
-| 성능 기준 봇 수집 | 캡처 off 10회 |
-| JSON 입력 재생 | 5회 |
-| 유효 episode | 35 / 35 |
-| RGB와 Depth 쌍 | 1,171쌍 |
+| 센서 포함 봇 수집 | 12회 모두 goal |
+| 성능 기준 봇 수집 | 캡처 off 11회 |
+| JSON 입력 재생 | 7회 |
+| 유효 episode | 40 / 40 |
+| RGB와 Depth 쌍 | 1,336쌍 |
 | 누락 capture | 0 |
 | capture drop | 0 |
 | validator 오류와 경고 | 0 / 0 |
 | JSON 재생 최대 평균 오차 | 0.000000 cm |
 | JSON 재생 최대 p95 오차 | 0.000000 cm |
-| 총 검증 데이터 크기 | 87,596,523 bytes, 약 83.54 MiB |
-| 데이터 Git revisions | `ff1b9a7bca35`, `8832e13d3ce4` |
+| 전투 원장 | 5발 5명중, replay 사건 일치 2 / 2 |
+| 총 검증 데이터 크기 | 98,676,683 bytes, 약 94.11 MiB |
+| 최신 전투 sample Git revision | `4a349dc95d0f` |
 
-봇 캡처 on/off는 각각 1,650프레임을 비교했다.
+봇 캡처 on/off는 각각 1,980프레임과 1,815프레임을 비교했다.
 
 | 측정 | Capture off | Capture on |
 |---|---:|---:|
-| 중앙 frame time | 36.619 ms | 36.105 ms |
-| frame 수 | 1,650 | 1,650 |
+| 중앙 frame time | 36.136 ms | 34.211 ms |
+| frame 수 | 1,815 | 1,980 |
 
-계산된 median FPS drop은 -1.422%였다. 이 실행에서는 캡처로 인한 저하가 검출되지 않았으며, 작은 음수 값은 실행 간 변동 범위로 해석한다.
+계산된 median FPS drop은 -5.629%였다. 이 실행에서는 캡처로 인한 저하가
+검출되지 않았으며, 음수 값은 서로 다른 실행 표본 사이의 변동으로 해석한다.
 
 전체 `Saved/SimTrace` 데이터는 Git에서 제외하지만, 검증된 대표 episode와
 보고서는 저장소의 [`docs/evidence`](docs/evidence)에 보존한다.
@@ -43,12 +47,13 @@ Unreal SimTrace는 Unreal 플레이를 재현 가능한 AI 연구 데이터로 �
 - [실제 trajectory 발췌](docs/evidence/sample/trajectory_excerpt.jsonl)
 - [16-bit Depth 원본](docs/evidence/sample/depth.png)
 - [Unreal native Replay archive](docs/evidence/sample/native_replay.replay)
+- [One Bullet Outcome Ledger 그래프](docs/evidence/reports/combat_ledger.png)
 
 ![실행 중 수집된 1인칭 RGB](docs/evidence/runtime_first_person.png)
 
 ![동일 sim frame의 RGB와 Depth](docs/evidence/rgb_depth_pair.png)
 
-공개 보고서에는 bot 20회, 사람 플레이 10회, input-replay 5회가 모드별로
+공개 보고서에는 bot 23회, 사람 플레이 10회, input-replay 7회가 모드별로
 구분되어 있다. 대표 원본 샘플과 자동 증거 영상은 재현 가능한 bot episode를
 사용하며, 사람 플레이 결과는 보고서와 행동 분포에 별도로 표시한다.
 

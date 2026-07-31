@@ -268,6 +268,84 @@ class PublishEvidenceTests(unittest.TestCase):
                 expected_hash,
             )
 
+    def test_prefers_latest_combat_episode_and_includes_fire_row(self) -> None:
+        self._write_episode(
+            "episode_bot_s1000",
+            mode="bot",
+            seed=1000,
+            capture_hz=10,
+            end_reason="goal",
+        )
+        combat_episode = self._write_episode(
+            "episode_20260731T120000000Z_bot_s5150_00",
+            mode="bot",
+            seed=5150,
+            capture_hz=10,
+            end_reason="goal",
+        )
+        manifest_path = combat_episode / "manifest.json"
+        manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+        manifest.update(
+            {
+                "schema_version": 2,
+                "shots_fired": 1,
+                "shots_hit": 1,
+                "shot_hit_rate": 1.0,
+            }
+        )
+        manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
+        trajectory_path = combat_episode / "trajectory.jsonl"
+        rows = [
+            json.loads(line)
+            for line in trajectory_path.read_text(encoding="utf-8").splitlines()
+        ]
+        rows[1].update(
+            {
+                "fire_pressed": True,
+                "combat_events": [
+                    {"sequence": 0, "event": "fire", "shot_id": 0},
+                    {"sequence": 1, "event": "shot", "shot_id": 0},
+                    {
+                        "sequence": 2,
+                        "event": "hit",
+                        "shot_id": 0,
+                        "target_id": "target_alpha",
+                        "distance_cm": 400.0,
+                    },
+                ],
+            }
+        )
+        trajectory_path.write_text(
+            "".join(json.dumps(row) + "\n" for row in rows),
+            encoding="utf-8",
+        )
+        self._write_report()
+
+        evidence = publish_evidence(
+            self.episodes_root,
+            self.reports_root,
+            self.output_root,
+            create_video=False,
+        )
+
+        self.assertEqual(evidence["source_episode_id"], combat_episode.name)
+        self.assertEqual(evidence["schema_version"], 2)
+        self.assertEqual(evidence["source_shots_fired"], 1)
+        self.assertEqual(evidence["source_shots_hit"], 1)
+        self.assertEqual(evidence["source_combat_sim_frame"], 1)
+        excerpt = [
+            json.loads(line)
+            for line in (
+                self.output_root / "sample" / "trajectory_excerpt.jsonl"
+            )
+            .read_text(encoding="utf-8")
+            .splitlines()
+        ]
+        self.assertTrue(any(row.get("fire_pressed") is True for row in excerpt))
+        readme = (self.output_root / "README.md").read_text(encoding="utf-8")
+        self.assertIn("Source combat ledger: 1 shot, 1 hit", readme)
+        self.assertIn("Combat ledger plot", readme)
+
     def test_rejects_a_report_with_validation_errors(self) -> None:
         self._write_episode(
             "episode_bot_s1000",

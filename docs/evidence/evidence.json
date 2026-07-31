@@ -1,62 +1,91 @@
 {
-  "schema_version": 1,
-  "generated_utc": "2026-07-31T05:44:38.010329Z",
-  "source_episode_id": "episode_20260730T164634194Z_bot_s1000_00",
-  "source_sim_frame": 81,
-  "git_revision": "ff1b9a7bca35",
-  "course_hash": "2960b24b",
+  "schema_version": 2,
+  "generated_utc": "2026-07-31T09:26:23.566153Z",
+  "source_episode_id": "episode_20260731T091927349Z_bot_s5150_00",
+  "source_sim_frame": 141,
+  "git_revision": "4a349dc95d0f",
+  "course_hash": "633e6795",
+  "source_shots_fired": 1,
+  "source_shots_hit": 1,
+  "source_combat_sim_frame": 142,
   "summary": {
-    "episode_count": 35,
-    "valid_episode_count": 35,
+    "episode_count": 40,
+    "valid_episode_count": 40,
     "error_count": 0,
     "warning_count": 0,
-    "total_bytes": 87596523,
+    "total_bytes": 98676683,
     "missing_capture_frames": 0,
     "capture_dropped": 0,
     "modes": {
-      "bot": 20,
-      "input-replay": 5,
+      "bot": 23,
+      "input-replay": 7,
       "human": 10
     },
     "outcomes": {
-      "goal": 30,
-      "replay_source_end": 5
+      "goal": 33,
+      "replay_source_end": 7
     },
-    "replay_comparison_count": 5,
+    "replay_comparison_count": 7,
     "performance": {
       "capture_on_ms": {
-        "count": 1650,
-        "mean": 37.415768906022564,
-        "p50": 36.10505163669586,
-        "p95": 45.42424809187651
+        "count": 1980,
+        "mean": 36.75379176633527,
+        "p50": 34.210601821541786,
+        "p95": 45.06121110171079
       },
       "capture_off_ms": {
-        "count": 1650,
-        "mean": 37.91249333909064,
-        "p50": 36.6185512393713,
-        "p95": 46.00058663636446
+        "count": 1815,
+        "mean": 37.691401437786986,
+        "p50": 36.1361987888813,
+        "p95": 45.97857780754566
       },
-      "median_fps_drop_percent": -1.4222375523582853
+      "median_fps_drop_percent": -5.62865563542061
+    },
+    "combat": {
+      "contract": "one_bullet_outcome_ledger_v1",
+      "shots_fired": 5,
+      "shots_hit": 5,
+      "shot_hit_rate": 1.0,
+      "by_mode": {
+        "bot": {
+          "shots_fired": 3,
+          "shots_hit": 3,
+          "shot_hit_rate": 1.0
+        },
+        "human": {
+          "shots_fired": 0,
+          "shots_hit": 0,
+          "shot_hit_rate": 0.0
+        },
+        "input-replay": {
+          "shots_fired": 2,
+          "shots_hit": 2,
+          "shot_hit_rate": 1.0
+        }
+      },
+      "replay_event_matches": 2,
+      "replay_event_comparisons": 2
     }
   },
   "video_duration_s": 60.0,
   "artifacts_sha256": {
-    "README.md": "23b966439b665a585fa3b62a37253c90f63eb4de974afde5235480435eb213d4",
-    "reports/action_distributions.png": "fcbbeb7501b4046fe3782b5a88f84cbebbf55e96d13f373e2f0a62db81cb5206",
-    "reports/capture_performance.png": "90447dc8cceaef4d122acc701d6da09b9b414eba76dc43b1359df5f8bb1f4613",
-    "reports/episode_outcomes.png": "7d16bce233ffdc2755a95953133bb3f85ced97e65b3b2301b7fb4a43e3610368",
-    "reports/episode_sizes.png": "3127cade454bf8eaa41d37ac8b778c15fe3983be785db7ec0fe8a8f10bf9d841",
-    "reports/replay_error.png": "e1a2a8eec09cd85b8096a19bcee92648824c9bb190ce1df04a1370ed768e4c0e",
-    "reports/summary.json": "337ab0a82c75dc1757c220bea24f5bc87653e55ff4571ca3433c63dcfc4d66cb",
-    "reports/summary.md": "16cea9ae312402eded3fbf5da322293306a36f2e9bc5b36a2fffb1bf979384b0",
-    "rgb_depth_pair.png": "c4d16f08ea6dc9e4a9dca608eba3687e84e62d5b6b9aae55d80c72e77205a4c4",
-    "runtime_first_person.png": "15099db70f7d43ad0c84c61ca55e84f258a42c0e2f873eccf13f4f240d66b46b",
-    "sample/depth.png": "f5a61cf71d158e4b38640a9e4ed88f6791e1ec9d912aa4506da43894966909c4",
-    "sample/depth_preview.png": "bfa794b8a45aa097c0d0a3a6fe412b6f82d34e9f97c09d58ab0778f9273c4f05",
-    "sample/manifest.json": "a760ac460a87127381b622136b834d2df712d6b46e7639c70ad9a69ed1e07461",
-    "sample/native_replay.replay": "e6c829bcb458cfccbdee00c6230e0d377dd15008323a37bc7d2281cbe120c596",
-    "sample/rgb.png": "15099db70f7d43ad0c84c61ca55e84f258a42c0e2f873eccf13f4f240d66b46b",
-    "sample/trajectory_excerpt.jsonl": "59a92f258d3466d64b326ee4b91f786b893d2d391714747fca8894f40539aefd",
-    "simtrace_demo.mp4": "f7ecf9d0797dba959645e7e4ce45e6569cbfa80e96fc856121ac13912ea51545"
+    "README.md": "b3e02d7a8e54d3b39076f70ae7ab7c98aea4c782428b8f95844bbf0311481cee",
+    "reports/action_distributions.png": "1a34debd0b040e8e456e212e212fef27c174cb6fd2496a1d700ee9ee8cd26447",
+    "reports/capture_performance.png": "77cbe4e65e9a349f31dddb63b5bf3a2bbc6cef473a7df002713d23f5d7acc52a",
+    "reports/combat_ledger.png": "fd0bf662949aa74dca682274c9dca46f658e193f04b0643de9f951f9c8227184",
+    "reports/episode_outcomes.png": "0d8f756126b83d58e0ab3427709b72fb4e5d5d3a21bbfafeb2b88d772001cb7e",
+    "reports/episode_sizes.png": "500f1fa61a461b90960e3a932f12ec63af8a9b4a60584a5514b9f18251e70689",
+    "reports/replay_error.png": "8133942c4533f43d57158b599077494c751fd72b1d025818307f51948077211d",
+    "reports/summary.json": "7c748b95b8f9052c061b792ee2d4dc5a6c8b1511ff652532a4ebd128d2f3db7d",
+    "reports/summary.md": "519619eb3908191e827387e082798992829fbb42c572b6f5c846647a4de3dc90",
+    "rgb_depth_pair.png": "d74a1c3b9db7a13d1819d39ea1d5e542ce3af005cc657397c96339411ceb413f",
+    "runtime_first_person.png": "ceeb4115948c019d70f427c5dc5ceeed5c861b6e028c71e77e36dd6012517feb",
+    "sample/depth.png": "7c819d5531c292d09ea8900fa9ce6b298b2676c4c2ca22273f89224d6222deea",
+    "sample/depth_preview.png": "49aed8f7fc416a0e72cfcd7211a7d738cf7726c6926e798210ffc15789855f73",
+    "sample/manifest.json": "a414586db8ba647b4e9a887f663837233224fe5bd10258fcd09b9e7a078ff156",
+    "sample/native_replay.replay": "6e373169b66232837a3dde617f9e0158d8aa48c362e926ce9916c5381ad055ab",
+    "sample/rgb.png": "ceeb4115948c019d70f427c5dc5ceeed5c861b6e028c71e77e36dd6012517feb",
+    "sample/trajectory_excerpt.jsonl": "fe1ed7e90bf2def480a9d6e896fa5f1e88f420b1c02031139a5b3ec7501b8da4",
+    "simtrace_demo.mp4": "11388666d1b1ef7c03fd7e3b2259359db071fd38ecea1a1d62663302e7c7e0dc"
   }
 }
