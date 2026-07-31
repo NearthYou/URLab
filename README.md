@@ -6,23 +6,24 @@ Unreal SimTrace는 Unreal 플레이를 재현 가능한 AI 연구 데이터로 �
 
 ## 구현 상태
 
-자동화 가능한 범위는 구현과 검증을 완료했다. 아래 수치와 파일은
-`ff1b9a7bca35`에서 새로 수집한 실제 실행 결과다.
+자동화 가능한 범위는 구현과 검증을 완료했다. 아래 수치와 파일은 manifest에
+기록된 런타임 revision `ff1b9a7bca35`, `8832e13d3ce4`에서 수집한 실제 실행 결과다.
 
 | 항목 | 현재 결과 |
 |---|---:|
+| 사람 플레이 수집 | 10회 모두 goal |
 | 센서 포함 봇 수집 | 10회 모두 goal |
 | 성능 기준 봇 수집 | 캡처 off 10회 |
-| JSON 입력 재생 | 3회 |
-| 유효 episode | 23 / 23 |
-| RGB와 Depth 쌍 | 550쌍 |
+| JSON 입력 재생 | 5회 |
+| 유효 episode | 35 / 35 |
+| RGB와 Depth 쌍 | 1,171쌍 |
 | 누락 capture | 0 |
 | capture drop | 0 |
 | validator 오류와 경고 | 0 / 0 |
 | JSON 재생 최대 평균 오차 | 0.000000 cm |
 | JSON 재생 최대 p95 오차 | 0.000000 cm |
-| 총 검증 데이터 크기 | 39,678,350 bytes, 약 37.84 MiB |
-| 측정 Git revision | `ff1b9a7bca35` |
+| 총 검증 데이터 크기 | 87,596,523 bytes, 약 83.54 MiB |
+| 데이터 Git revisions | `ff1b9a7bca35`, `8832e13d3ce4` |
 
 봇 캡처 on/off는 각각 1,650프레임을 비교했다.
 
@@ -47,9 +48,9 @@ Unreal SimTrace는 Unreal 플레이를 재현 가능한 AI 연구 데이터로 �
 
 ![동일 sim frame의 RGB와 Depth](docs/evidence/rgb_depth_pair.png)
 
-공개 증거에는 자동 생성한 bot, capture baseline, input-replay episode만 포함한다.
-사람 플레이 10회는 자동 데이터로 가장하지 않으며 실제 사용자가 아래 명령으로
-수집해야 한다.
+공개 보고서에는 bot 20회, 사람 플레이 10회, input-replay 5회가 모드별로
+구분되어 있다. 대표 원본 샘플과 자동 증거 영상은 재현 가능한 bot episode를
+사용하며, 사람 플레이 결과는 보고서와 행동 분포에 별도로 표시한다.
 
 ## 아키텍처
 
@@ -375,6 +376,7 @@ Unreal Automation Tests를 실행한다.
 - episode 데이터 계약
 - RGB와 Depth 누락 감지
 - total byte 교차 검사
+- manifest total byte 자릿수 경계 수렴
 - JSON 재생 부모와 전체 frame 정렬
 - 상수에 가까운 행동값의 report 생성
 - 성능 비교에서 bot capture on/off만 선택
@@ -392,9 +394,8 @@ Unreal Automation Tests를 실행한다.
 | 50초에서 55초 | JSON 입력 재생 위치 오차 |
 | 55초에서 60초 | 유효 episode, drop과 replay 결과 |
 
-면접용 라이브 화면 녹화가 필요하면 사람 10회 수집을 마치고 report와
-publish 명령을 다시 실행한 뒤 별도로 촬영한다. 현재 저장된 MP4는
-재현 가능한 자동 증거 영상이며 사람 조작 영상으로 표시하지 않는다.
+현재 저장된 MP4는 재현 가능한 자동 증거 영상이다. 면접용 라이브 화면에서는
+사람 조작 실행을 별도로 녹화하고 자동 증거 영상과 구분해 표시한다.
 
 ## 공식 API 기준
 

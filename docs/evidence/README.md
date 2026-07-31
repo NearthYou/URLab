@@ -5,10 +5,10 @@ The full generated dataset remains under `Saved/SimTrace` and is ignored by Git.
 
 - Source episode: `episode_20260730T164634194Z_bot_s1000_00`
 - Git revision recorded by Unreal: `ff1b9a7bca35`
-- Valid episodes: 23
+- Valid episodes: 35
 - Missing captures: 0
 - Capture drops: 0
-- Replay comparisons: 3
+- Replay comparisons: 5
 
 ## Runtime view
 
@@ -35,5 +35,5 @@ one was present.
 
 The reel is generated only from recorded RGB frames and report artifacts.
 
-This automated evidence set contains bot, capture-baseline, and input-replay
-episodes. Human-play episodes are intentionally not represented as automated data.
+The compact sample and evidence reel use deterministic bot episodes.
+The validation report also includes 10 human-play episodes, labeled by mode.
