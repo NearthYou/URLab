@@ -1,10 +1,16 @@
 #include "SimTraceGameInstance.h"
 
+#include "Camera/CameraComponent.h"
+#include "Engine/DemoNetDriver.h"
+#include "EngineUtils.h"
+#include "GameFramework/PlayerController.h"
 #include "HAL/FileManager.h"
 #include "HAL/PlatformMisc.h"
 #include "Misc/CommandLine.h"
 #include "Misc/Paths.h"
 #include "Net/UnrealNetwork.h"
+#include "SimTraceCharacter.h"
+#include "TimerManager.h"
 #include "UnrealSimTrace.h"
 
 void USimTraceGameInstance::Init()
@@ -26,8 +32,53 @@ void USimTraceGameInstance::Init()
 
 void USimTraceGameInstance::Shutdown()
 {
+	GetTimerManager().ClearTimer(ReplayCameraRetryHandle);
 	FNetworkReplayDelegates::OnReplayPlaybackComplete.Remove(ReplayCompleteHandle);
 	Super::Shutdown();
+}
+
+void USimTraceGameInstance::TryAttachReplayCamera()
+{
+	UWorld* ReplayWorld = GetWorld();
+	UDemoNetDriver* DemoNetDriver = ReplayWorld ? ReplayWorld->GetDemoNetDriver() : nullptr;
+	APlayerController* SpectatorController =
+		DemoNetDriver ? DemoNetDriver->GetSpectatorController() : nullptr;
+	if (!ReplayWorld || !SpectatorController)
+	{
+		return;
+	}
+
+	for (TActorIterator<ASimTraceCharacter> CharacterIt(ReplayWorld); CharacterIt; ++CharacterIt)
+	{
+		ASimTraceCharacter* ReplayCharacter = *CharacterIt;
+		if (!IsValid(ReplayCharacter) || ReplayCharacter->IsActorBeingDestroyed())
+		{
+			continue;
+		}
+
+		if (SpectatorController->GetViewTarget() != ReplayCharacter)
+		{
+			SpectatorController->bAutoManageActiveCameraTarget = false;
+			if (UCameraComponent* FirstPersonCamera = ReplayCharacter->GetFirstPersonCamera())
+			{
+				FirstPersonCamera->SetActive(true);
+			}
+			SpectatorController->SetViewTarget(ReplayCharacter);
+		}
+
+		if (SpectatorController->GetViewTarget() == ReplayCharacter)
+		{
+			SpectatorController->SetIgnoreMoveInput(true);
+			SpectatorController->SetIgnoreLookInput(true);
+			GetTimerManager().ClearTimer(ReplayCameraRetryHandle);
+			UE_LOG(
+				LogSimTrace,
+				Display,
+				TEXT("Replay camera attached to recorded character: %s"),
+				*ReplayCharacter->GetName());
+			return;
+		}
+	}
 }
 
 void USimTraceGameInstance::OnStart()
@@ -61,7 +112,16 @@ void USimTraceGameInstance::OnStart()
 			TEXT("Unable to start native replay: %s"),
 			*RuntimeConfig.ReplayName);
 		FPlatformMisc::RequestExitWithStatus(false, 1);
+		return;
 	}
+
+	GetTimerManager().SetTimer(
+		ReplayCameraRetryHandle,
+		this,
+		&USimTraceGameInstance::TryAttachReplayCamera,
+		0.05f,
+		true,
+		0.0f);
 }
 
 void USimTraceGameInstance::StartEpisodeReplay(const FString& ReplayName)
@@ -123,6 +183,7 @@ void USimTraceGameInstance::HandleReplayPlaybackComplete(UWorld*)
 {
 	if (RuntimeConfig.Mode == ESimTraceMode::NativeReplay)
 	{
+		GetTimerManager().ClearTimer(ReplayCameraRetryHandle);
 		FPlatformMisc::RequestExit(false);
 	}
 }

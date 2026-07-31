@@ -11,6 +11,7 @@
 #include "SimTraceCourseLayout.h"
 #include "SimTraceGameMode.h"
 #include "SimTraceHUD.h"
+#include "SimTraceReplaySpectatorController.h"
 #include "SimTraceRuntimeConfig.h"
 #include "SimTraceTypes.h"
 #include "Serialization/JsonReader.h"
@@ -114,6 +115,16 @@ bool FSimTraceRuntimePresentationTest::RunTest(const FString& Parameters)
 	TestTrue(
 		TEXT("Game mode uses the runtime range HUD"),
 		GameMode->HUDClass == ASimTraceHUD::StaticClass());
+	TestTrue(
+		TEXT("Game mode uses the SimTrace replay spectator"),
+		GameMode->ReplaySpectatorPlayerControllerClass ==
+			ASimTraceReplaySpectatorController::StaticClass());
+
+	const ASimTraceReplaySpectatorController* ReplayController =
+		GetDefault<ASimTraceReplaySpectatorController>();
+	TestFalse(
+		TEXT("Replay spectator keeps manual ownership of its view target"),
+		ReplayController->bAutoManageActiveCameraTarget);
 	return true;
 }
 
