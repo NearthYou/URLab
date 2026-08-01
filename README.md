@@ -1,272 +1,106 @@
 # Unreal SimTrace
 
-Unreal SimTrace는 AI 모델을 직접 학습하는 프로젝트가 아니다. Unreal 플레이를 학습과 평가에 사용할 수 있는 검증된 causal transition 데이터로 바꾸는 수집 환경이다. 30 Hz 상태와 행동, 10 Hz RGB와 16-bit Depth, 한 번의 발사가 `fire → shot → hit/miss`로 이어지는 결과를 같은 시간축에 기록한다. JSON 입력 재생으로 경로와 사건을 비교하고 Python exporter가 `관측 t → 행동 t+1 → 결과 t+1` 학습 표본을 만든다.
+플레이어의 입력과 게임 상태, 그 순간의 화면과 공간 정보를 함께 기록하고, 같은 입력을 다시 실행했을 때 결과가 재현되는지 확인하는 Unreal Engine 5 실험 환경입니다.
 
-Level, Blueprint, Input Action asset을 만들지 않고 `/Engine/Maps/Entry`에서 C++가 seed 기반 코스, 캐릭터, 입력, 조명, 센서와 사격장을 실행 시점에 생성한다.
+`Unreal Engine 5.8.1` `C++` `Python` `개인 프로젝트`
 
-현재 구현은 Unreal Engine 5.8.1 Editor Development 환경을 대상으로 한다.
+[60초 실행 및 검증 영상](docs/evidence/simtrace_demo.mp4) | [검증 보고서](docs/evidence/reports/summary.md) | [대표 manifest](docs/evidence/sample/manifest.json) | [trajectory 발췌](docs/evidence/sample/trajectory_excerpt.jsonl)
 
-## 프로젝트 요약
+![같은 프레임에서 수집한 RGB와 Depth](docs/evidence/rgb_depth_pair.png)
+
+## 프로젝트를 시작한 이유
+
+게임 화면만 녹화해 두면 그 순간 어떤 입력이 들어왔고, 물리 계산이 끝난 뒤 캐릭터가 어떤 상태가 되었는지 다시 알기 어렵습니다. 사람과 봇이 서로 다른 방식으로 캐릭터를 움직인다면 결과의 차이가 행동 때문인지 구현 차이 때문인지도 구분하기 어렵습니다.
+
+소형 GPT를 직접 구현하며 모델 구조뿐 아니라 입력과 정답이 어떻게 연결된 데이터를 주는지가 중요하다는 점을 배웠습니다. 이 경험을 게임 엔진 안에서도 확인해 보고 싶어, 모델 학습보다 먼저 행동과 상태, 센서 데이터를 언제 어떻게 기록하고 검증할지에 집중했습니다.
+
+## 한눈에 보기
 
 | 항목 | 내용 |
 |---|---|
 | 개발 형태 | 개인 개발 |
-| 해결하려는 문제 | Unreal 플레이 결과만 남기면 연구자가 어떤 관측에서 어떤 행동이 나왔는지 재구성하기 어렵다 |
-| 핵심 선택 | 사람, 봇, JSON 재생을 같은 Enhanced Input 경로로 통과시키고 상태, 행동, 센서와 종료 이유를 같은 simulation frame에 기록 |
-| 결과물 | 수집기, 재생기, validator, 학습 표본 exporter와 공개 evidence bundle |
-| 검증 | 유효 episode 60 / 60, RGB와 Depth 1,886쌍, 누락과 drop 0건, 같은 engine과 revision에서 JSON 재생 7 / 7 exact |
+| 핵심 질문 | 같은 게임 상황을 반복해서 비교할 수 있는 데이터를 어떻게 만들 것인가 |
+| 수집 대상 | 이동과 시점 입력, 캐릭터 상태, 충돌과 사격 이벤트, RGB, 16비트 Depth |
+| 입력 방식 | 사람 조작, 규칙 기반 봇, 기록한 입력을 다시 적용하는 실행 |
+| 결과물 | Unreal 수집 환경, 입력 재실행, Python 검증 도구, 보고서와 학습용 인덱스 exporter |
+| 구현 범위 | 데이터 생성과 검증까지이며 모델 학습은 포함하지 않음 |
 
-게임 화면을 녹화하는 것만으로는 AI 학습과 평가에 쓸 수 없다. 입력과 상태의 시간축이 어긋나거나 사람과 봇이 서로 다른 제어 코드를 사용하면 결과 차이가 환경 때문인지 행동 때문인지 설명하기 어렵다. 그래서 먼저 입력 경로와 데이터 계약을 하나로 고정하고, 그 계약을 재생과 validator가 다시 확인하도록 설계했다.
+Level, Blueprint, Input Action asset을 따로 만들지 않았습니다. `/Engine/Maps/Entry`에서 C++가 seed 기반 코스, 캐릭터, 입력, 조명, 센서와 사격장을 실행 시점에 생성합니다. 프로젝트 전용 asset 없이도 같은 조건을 다시 만들 수 있게 하기 위한 선택입니다.
 
-## 구현 상태
+## 처음 만난 문제
 
-아래 수치는 `Saved/SimTrace`의 실제 manifest와 trajectory를 validator가 다시 읽어 만든 결과다. 데이터는 여러 개발 revision에서 수집했으며, 최신 등록형 성능 벤치마크 20회와 공개 대표 sample은 `ad1c6bff321f`에서 실행했다.
+초기 구현에서는 사람이 직접 조작할 때, 봇이 자동으로 움직일 때, 저장한 이동 명령을 다시 실행할 때가 각각 다른 코드 경로를 사용했습니다. 같은 명령이어도 적용되는 시점이 달라졌고, 저장한 입력을 다시 실행하면 원본과 이동 경로와 최종 위치가 달라졌습니다.
 
-| 항목 | 현재 결과 |
-|---|---:|
-| 사람 플레이 수집 | 10회 모두 goal |
-| 봇 수집 | 43회 모두 goal |
-| JSON 입력 재생 | 7회 |
-| 유효 episode | 60 / 60 |
-| RGB와 Depth 쌍 | 1,886쌍 |
-| 누락 capture | 0 |
-| capture drop | 0 |
-| validator 오류와 경고 | 0 / 0 |
-| JSON 재생 경로 | 같은 engine과 revision 쌍에서 7 / 7 exact |
-| JSON 재생 환경 범위 | cross-host 미검증 |
-| 전투 원장 | 25개 발사 결과, replay 사건 일치 2 / 2 |
-| ML export | 53 episode, 8,895 transition |
-| RGB/Depth 학습 표본 | 1,827개 |
-| 총 검증 데이터 크기 | 135,810,684 bytes, 약 129.52 MiB |
-| Python 회귀 테스트 | 60개 통과 |
-| Unreal Automation | 7개 통과 |
+단순히 좌표를 더 자주 저장하는 것으로는 이 문제를 해결할 수 없었습니다. 어떤 입력을 어느 시점에 적용했고, 물리 계산이 끝난 뒤 어떤 상태가 되었는지를 같은 기준으로 기록해야 했습니다.
 
-캡처 성능은 seed 6000부터 6009까지 같은 코스의 capture off/on 순서를 번갈아 실행한 등록형 10쌍 벤치마크로 측정했다.
+## 어떻게 해결했나
 
-| 측정 | 결과 |
-|---|---:|
-| 대응 seed | 10쌍 |
-| 대응 p95 frame-time 차이, on - off | 0.0888 ms |
-| p95 차이의 bootstrap 95% 구간 | 0.0223 ms에서 0.3408 ms |
-| 중앙 frame-time 차이 | -0.0035 ms, inconclusive |
-| tail 해석 | 작은 증가 검출 |
+### 입력 경로를 하나로 통합
 
-30 Hz로 pacing된 실행에서는 중앙 frame time보다 tail이 프레임 예산 초과 가능성을 더 잘 보여준다. 검출된 p95 증가량은 33.33 ms 예산의 약 0.27%다. 이를 평균 FPS 저하로 바꾸어 과장하지 않으며, pooled frame 비교와 중앙값은 진단용으로만 남긴다.
+사람의 조작, 규칙 기반 봇, 기록한 명령으로 다시 움직이는 경우가 모두 Unreal의 Enhanced Input을 거치도록 통합했습니다. 봇도 캐릭터 위치를 직접 바꾸지 않고 사람이 누르는 것과 같은 Move, Look, Jump, Fire action을 주입합니다.
 
-전체 `Saved/SimTrace` 데이터는 Git에서 제외하지만, 검증된 대표 episode와
-보고서는 저장소의 [`docs/evidence`](docs/evidence)에 보존한다.
+이동 명령은 PrePhysics에 적용하고, 그 결과는 CharacterMovement의 물리 계산이 끝난 PostPhysics 시점에 기록합니다. 입력 방식이 달라도 행동이 적용되고 상태가 저장되는 순서는 같아집니다.
 
-- [60초 실제 데이터 증거 영상](docs/evidence/simtrace_demo.mp4)
-- [검증 보고서](docs/evidence/reports/summary.md)
-- [실제 manifest](docs/evidence/sample/manifest.json)
-- [실제 trajectory 발췌](docs/evidence/sample/trajectory_excerpt.jsonl)
-- [16-bit Depth 원본](docs/evidence/sample/depth.png)
-- [Unreal native Replay archive](docs/evidence/sample/native_replay.replay)
-- [One Bullet Outcome Ledger 그래프](docs/evidence/reports/combat_ledger.png)
-- [검증된 ML dataset 요약](docs/evidence/ml_dataset_manifest.json)
-- [익명 PUBG telemetry 집계](docs/evidence/pubg/0340a0db4df30089.json)
+### 행동과 상태, 센서를 같은 시간축에 기록
 
-![실행 중 수집된 1인칭 RGB](docs/evidence/runtime_first_person.png)
+행동과 상태, 이벤트는 초당 30번 기록합니다. RGB와 16비트 Depth는 초당 10번 저장하고 같은 `sim_frame` 번호로 묶습니다. 이미지 저장은 백그라운드 작업으로 넘기되, queue가 가득 차면 조용히 버리지 않고 `capture_dropped=true`를 남깁니다.
 
-![동일 sim frame의 RGB와 Depth](docs/evidence/rgb_depth_pair.png)
+한 episode에는 다음 정보가 함께 저장됩니다.
 
-공개 보고서에는 bot 43회, 사람 플레이 10회, input-replay 7회가 모드별로
-구분되어 있다. 대표 원본 샘플과 자동 증거 영상은 재현 가능한 bot episode를
-사용하며, 사람 플레이 결과는 보고서와 행동 분포에 별도로 표시한다.
+| 주기 | 기록 내용 |
+|---|---|
+| 30 Hz | 이동과 시점 입력, 위치, 회전, 속도, 목표까지의 상대 좌표, 충돌과 사격 이벤트 |
+| 10 Hz | 같은 simulation frame의 320 x 180 RGB와 16비트 Depth |
+| episode 단위 | seed, 실행 모드, Engine과 Git revision, 종료 이유, 파일 수와 크기, Replay 정보 |
 
-## 아키텍처
+### 수집 결과를 다시 검증
+
+기록 도중 프로그램이 종료된 데이터를 완성된 episode로 오인하지 않도록 먼저 `manifest.partial.json`을 만듭니다. JSONL과 이미지 저장이 모두 끝나고 파일 수까지 확인한 뒤에만 `manifest.json`으로 교체합니다.
+
+Python validator는 프레임 중복과 누락, 30 Hz timestamp, RGB와 Depth 대응 관계, 이미지 bit depth, capture drop, 종료 상태, manifest와 실제 파일 수를 검사합니다. 저장한 입력을 다시 실행한 결과도 원본 trajectory와 프레임별로 비교합니다.
+
+## 데이터 흐름
 
 ```mermaid
 flowchart LR
-    A["사람, waypoint 봇, JSON 재생"] --> B["런타임 Enhanced Input"]
-    B --> C["30 Hz PrePhysics 입력"]
-    C --> D["Unreal CharacterMovement"]
+    A["사람의 조작, 규칙 기반 봇, 기록한 명령"] --> B["Enhanced Input"]
+    B --> C["PrePhysics 행동 적용"]
+    C --> D["CharacterMovement"]
     D --> E["PostPhysics 상태 기록"]
     E --> F["trajectory.jsonl"]
-    C --> K["fire → shot → hit/miss"]
-    K --> F
     E --> G["3 frame마다 RGB와 Depth"]
     G --> H["백그라운드 PNG 저장"]
     C --> I["Unreal native Replay"]
     F --> J["Python validator와 report"]
     H --> J
     I --> J
-    F --> N["causal ML exporter"]
-    H --> N
-    N --> O["seed 단위 train, validation, test"]
-    L["PUBG 공식 telemetry"] --> M["Saved raw와 익명 집계"]
-    M --> J
+    F --> K["학습용 transition exporter"]
+    H --> K
 ```
 
-episode를 reset한 뒤에는 사람 입력을 잠근 상태로 PostPhysics 한 프레임을
-warm-up하고, 그 다음 프레임부터 recorder와 native Replay를 함께 시작한다.
-이 순서로 CharacterMovement의 바닥 정착이 끝난 상태를 `sim_frame = 0`으로 기록한다.
+episode를 reset한 직후에는 사람 입력을 잠그고 PostPhysics 한 프레임을 기다립니다. CharacterMovement가 바닥에 정착한 다음 프레임을 `sim_frame = 0`으로 삼아 recorder와 native Replay를 함께 시작합니다.
 
-핵심 책임은 다음 파일에 나뉜다.
+## 검증 결과
 
-| 책임 | 파일 |
-|---|---|
-| 실행 옵션과 모드 | `SimTraceRuntimeConfig` |
-| 결정적 코스 생성과 hash | `SimTraceCourseLayout`, `SimTraceCourseActor` |
-| 런타임 입력과 1인칭 캐릭터 | `SimTraceCharacter`, `SimTracePlayerController` |
-| episode 상태와 봇, 입력 재생 | `SimTraceGameMode` |
-| 런타임 조준점과 사격 결과 HUD | `SimTraceHUD` |
-| JSONL과 manifest | `EpisodeRecorderComponent` |
-| RGB와 Depth, 비동기 PNG | `SimTraceCaptureComponent` |
-| native Replay | `SimTraceGameInstance` |
-| 데이터 검증과 보고서 집계 | `Scripts/validate_dataset.py` |
-| Matplotlib 그래프 생성 | `Scripts/simtrace_plots.py` |
-| causal transition과 seed split export | `Scripts/export_ml_dataset.py` |
-| 교차 순서 capture 벤치마크 | `Scripts/run_capture_benchmark.ps1` |
-| PUBG telemetry 수집과 익명 집계 | `Scripts/pubg_telemetry.py` |
-| 추적 가능한 샘플과 60초 증거 영상 | `Scripts/publish_evidence.py` |
+아래 수치는 저장소에 포함된 [실제 검증 보고서](docs/evidence/reports/summary.md)와 manifest에서 다시 확인할 수 있습니다.
 
-## 요구 환경
+| 항목 | 결과 |
+|---|---:|
+| 유효 episode | 60 / 60 |
+| 사람 플레이 | 10회 모두 goal |
+| 봇 실행 | 43회 모두 goal |
+| 기록한 입력으로 다시 실행 | 7회 |
+| RGB와 Depth 쌍 | 1,886쌍 |
+| 누락 capture | 0 |
+| capture drop | 0 |
+| validator 오류와 경고 | 0 / 0 |
+| 원본과 다시 실행한 경로 | 7 / 7 exact |
+| Python 회귀 테스트 | 60개 통과 |
+| Unreal Automation | 7개 통과 |
 
-- Unreal Engine 5.8.1
-- Visual Studio의 Unreal C++ toolchain
-- PowerShell 7 또는 Windows PowerShell
-- `uv`
-- Python 3.13
-- `ffmpeg`, `ffprobe`는 증거 영상 갱신에만 필요
+7개 경로는 같은 Unreal Engine 버전과 같은 Git revision으로 만든 원본과 다시 실행한 결과를 비교했고, 프레임별 위치와 최종 위치가 모두 일치했습니다. 다른 PC에서도 같은 결과가 나오는지는 아직 검증하지 않았습니다.
 
-프로젝트 전용 `.uasset`은 필요하지 않다. Engine의 `/Engine/BasicShapes/Cube`와 기본 material만 런타임에 참조하고, 동적 material로 올리브, 콘크리트, 러스트 계열의 전장 훈련장 팔레트를 적용한다.
-
-## 설치와 빌드
-
-Python 환경을 만든다.
-
-```powershell
-uv sync --python 3.13
-```
-
-Editor Development target을 빌드한다.
-
-```powershell
-powershell -ExecutionPolicy Bypass -File Scripts/build.ps1
-```
-
-Unreal 설치 경로가 다르면 지정한다.
-
-```powershell
-powershell -ExecutionPolicy Bypass -File Scripts/build.ps1 `
-  -EngineRoot "D:\Epic\UE_5.8"
-```
-
-Live Coding이 실행 중이면 외부 빌드가 차단될 수 있다. 이 경우 Unreal Editor와 Live Coding Console을 닫고 다시 실행한다.
-
-## 실행
-
-### 사람 플레이 10회
-
-```powershell
-powershell -ExecutionPolicy Bypass -File Scripts/run_simtrace.ps1 `
-  -Mode human `
-  -Seed 1000 `
-  -BatchCount 10 `
-  -Capture 1
-```
-
-조작법은 다음과 같다.
-
-| 입력 | 동작 |
-|---|---|
-| W, A, S, D | 이동 |
-| 마우스 | 시점 |
-| 마우스 왼쪽 버튼 | hitscan 한 발 발사와 결과 기록 |
-| Space | 점프 |
-| R | 현재 episode를 manual_abort로 종료하고 다음 시드 시작 |
-| Esc | 프로그램 종료 |
-
-목표에 도착하면 다음 시드가 자동으로 시작된다. 실패 회차도 삭제하지 않고 종료 원인 통계에 포함한다.
-
-### 봇 10회
-
-```powershell
-powershell -ExecutionPolicy Bypass -File Scripts/run_simtrace.ps1 `
-  -Mode bot `
-  -Seed 1000 `
-  -BatchCount 10 `
-  -Capture 1 `
-  -Headless
-```
-
-봇은 NavMesh나 Behavior Tree 없이 정해진 waypoint와 전방 Ray Cast를 사용한다. 목표판을 조준해 한 발을 발사하며, 이동과 사격 입력 모두 사람과 같은 Enhanced Input action으로 주입한다.
-
-### JSON 입력 재생
-
-```powershell
-$trajectory = Resolve-Path `
-  "Saved\SimTrace\episodes\<source-episode>\trajectory.jsonl"
-
-powershell -ExecutionPolicy Bypass -File Scripts/run_simtrace.ps1 `
-  -Mode input-replay `
-  -InputPath $trajectory `
-  -Capture 0 `
-  -Headless
-```
-
-재생은 원본 manifest의 seed, 시작 transform, 속도와 controller 회전을 사용한다. 원본의 마지막 action frame까지 실행하며 새 manifest에 `parent_episode_id`를 기록한다.
-
-### Unreal native Replay
-
-먼저 episode의 `manifest.json`에서 `replay_name`을 확인한다.
-
-```powershell
-powershell -ExecutionPolicy Bypass -File Scripts/run_simtrace.ps1 `
-  -Mode native-replay `
-  -ReplayName "simtrace_<episode-id>"
-```
-
-archive가 `Saved/Demos`에 없으면 `Saved/SimTrace/episodes`에서 찾아 복원한 뒤 Unreal Replay System으로 재생한다. 재생 종료 delegate가 호출되면 프로그램도 종료된다.
-
-### 캡처 성능 기준
-
-같은 seed의 capture off/on을 한 쌍으로 만들고 실행 순서를 seed마다 교차한다.
-
-```powershell
-powershell -ExecutionPolicy Bypass `
-  -File Scripts/run_capture_benchmark.ps1 `
-  -PairCount 10 `
-  -StartSeed 6000
-```
-
-실행 순서와 실제 episode ID는 `Saved/SimTrace/benchmarks/<benchmark-id>/design.json`에 저장된다. validator는 선언된 순서와 실제 시작 시각, seed, build revision, course hash를 교차 검사한다. 보고서는 검증된 bot episode만 일차 성능 근거로 사용하고, 각 episode의 p95 frame time을 seed별로 비교한다.
-
-### PUBG telemetry 가져오기
-
-API key는 명령행 인자로 받지 않고 현재 PowerShell process의 환경변수로만 전달한다.
-
-```powershell
-$secureKey = Read-Host "PUBG API key" -AsSecureString
-$env:PUBG_API_KEY = [Net.NetworkCredential]::new("", $secureKey).Password
-
-uv run python Scripts/pubg_telemetry.py fetch `
-  --platform steam `
-  --player-name "<PUBG player name>"
-```
-
-match ID를 이미 알고 있으면 `--player-name` 대신 `--match-id "<match-id>"`를 사용한다. importer는 공식 match endpoint에서 관련 telemetry asset을 찾고 gzip JSON을 내려받는다. API 응답과 telemetry 원본, 원본 URL을 포함한 private provenance는 다음 경로에만 저장된다.
-
-```text
-Saved/SimTrace/imports/pubg/raw/<platform>/<match-id>/
-```
-
-계정 ID와 player name을 제외한 공격, 피해, knock, kill, 위치 표본과 phase 통계는 hash 기반 provenance와 함께 `Saved/SimTrace/imports/pubg/derived`에 저장된다. `LogPlayerKillV2`의 거리는 공식 `DamageInfo` 중 `finishDamageInfo`, `killerDamageInfo`, `dBNODamageInfo` 순서로 복원한다. 공개 저장소로 복사할 때는 top-level과 중첩 객체의 정확한 field 구성을 다시 검사하고, 검증된 값으로 새 summary를 만든다.
-
-```powershell
-uv run python Scripts/pubg_telemetry.py publish `
-  "Saved/SimTrace/imports/pubg/derived/<platform>/<hash>/summary.json" `
-  --output "docs/evidence/pubg/<match-hash>.json"
-```
-
-공개 summary에는 원본 match ID 대신 SHA-256만 남고 `raw_data_publishable=false`, `contains_player_identifiers=false`가 기록된다. API key는 어느 파일에도 쓰지 않는다. PUBG Developer API의 기본 key는 공식 문서 기준 분당 10회 제한이므로 batch crawler는 구현하지 않았다.
-
-### 런타임 사격장 표현
-
-화면은 PUBG의 야외 전투 훈련장 인상을 참고해 올리브색 바닥, 콘크리트 벽, 러스트색 엄폐물, 붉은 목표판, 중앙 조준점과 사격 결과 패널로 구성했다. 모든 geometry, material instance와 HUD는 C++가 실행 중 생성하므로 프로젝트 전용 asset 편집은 없다.
-
-PUBG 로고, 원본 맵 배치, 추출한 model과 texture는 포함하지 않는다. 외부 소품을 더할 때는 [Poly Haven CC0](https://polyhaven.com/license) 또는 [Kenney CC0](https://kenney.nl/support) asset page, license, 원본 파일 SHA-256을 함께 보존한다. 현재 기본 실행은 외부 model 없이 같은 결과를 재현한다.
+캡처 성능은 같은 코스 seed 10쌍에서 capture off와 on의 실행 순서를 번갈아 측정했습니다. 대응 p95 frame time 차이의 중앙값은 0.0888 ms였고 bootstrap 95% 구간은 0.0223 ms에서 0.3408 ms였습니다. 평균 FPS로 바꾸지 않고, 프레임이 느려지는 구간에서 관측된 추가 지연으로만 기록했습니다.
 
 ## 데이터 구조
 
@@ -281,198 +115,187 @@ Saved/SimTrace/episodes/<episode_id>/
     000000.png
     000003.png
   replay/
-    simtrace_<episode_id>.replay
+    simtrace_<episode-id>.replay
 ```
 
-기록 중에는 `manifest.partial.json`만 존재한다. JSONL을 닫고 이미지 작업을 전부 기다린 뒤 native Replay archive와 파일 집계를 반영해 `manifest.json`으로 교체한다.
-
-episode ID는 UTC millisecond 시각, mode, seed, batch 순번으로 구성한다.
-
-```text
-episode_20260730T130155085Z_bot_s1000_00
-```
-
-## Trajectory schema
-
-한 줄은 30 Hz simulation frame 하나를 뜻한다.
+trajectory 한 줄은 30 Hz simulation frame 하나를 뜻합니다.
 
 ```json
 {
-  "schema_version": 2,
   "sim_frame": 42,
   "timestamp_s": 1.4,
-  "delta_s": 0.033333,
   "position_cm": [120.0, 35.0, 90.0],
-  "rotation_deg": [0.0, 15.0, 0.0],
   "velocity_cm_s": [210.0, 0.0, 0.0],
   "goal_relative_cm": [2980.0, -35.0, 10.0],
   "move_input": [1.0, 0.0],
   "look_input": [0.15, -0.03],
   "jump_pressed": false,
-  "fire_pressed": true,
-  "combat_events": [
-    {"sequence": 0, "event": "fire", "shot_id": 0},
-    {
-      "sequence": 1,
-      "event": "shot",
-      "shot_id": 0,
-      "origin_cm": [120.0, 35.0, 154.0],
-      "direction": [1.0, 0.0, 0.0]
-    },
-    {
-      "sequence": 2,
-      "event": "hit",
-      "shot_id": 0,
-      "target_id": "target_alpha",
-      "impact_position_cm": [2930.0, 6.4, 168.0],
-      "distance_cm": 2810.2
-    }
-  ],
-  "collision": false,
   "captured": true,
   "rgb_path": "rgb/000042.png",
   "depth_path": "depth/000042.png",
-  "capture_dropped": false,
-  "frame_time_ms": 38.2,
-  "done": false,
-  "end_reason": ""
+  "done": false
 }
 ```
 
-사격하지 않은 frame은 `fire_pressed=false`, `combat_events=[]`다. 발사 frame은 순서가 고정된 세 사건을 갖고 마지막 사건만 `hit` 또는 `miss`가 된다. `shot_id`는 episode 안에서 0부터 증가한다. manifest의 `combat_contract`, `shots_fired`, `shots_hit`, `shot_hit_rate`는 전체 JSONL 원장과 일치해야 한다. validator는 기존 schema 1 episode도 계속 읽지만 새 수집은 schema 2로 기록한다.
-
-`timestamp_s`는 실제 경과 시간이 아니라 `sim_frame / 30`으로 계산한다. 마지막 행은 항상 `done=true`이며 다음 종료 원인 중 하나를 갖는다.
-
-- `goal`
-- `timeout`
-- `fell`
-- `manual_abort`
-- `capture_error`
-- `io_error`
-- `replay_source_end`
-
-## RGB와 Depth
-
-| 센서 | 설정 |
-|---|---|
-| RGB | `SCS_FinalColorLDR`, 8-bit RGBA PNG |
-| Depth | `SCS_SceneDepth`, R32 float readback |
-| 저장 Depth | 16-bit grayscale PNG |
-| 크기 | 320 x 180 |
-| 주기 | 3 simulation frame마다, 10 Hz |
-| 최대 거리 | 2000 cm |
-| 비동기 queue | RGB와 Depth 8쌍 |
-
-16-bit Depth 값 `v`는 다음처럼 복원한다.
+Depth는 `SCS_SceneDepth`의 R32 float 값을 읽어 최대 2000 cm 범위의 16비트 grayscale PNG로 저장합니다. 값이 0이면 배경 또는 유효하지 않은 pixel이며, 나머지는 다음 식으로 cm 단위 거리를 복원합니다.
 
 ```text
-v == 0: 배경 또는 유효하지 않은 pixel
 depth_cm = min(v / 65535.0 * 2000.0, 2000.0)
 ```
 
-queue가 가득 차면 frame을 조용히 버리지 않고 `capture_dropped=true`로 기록한다. 최종 수집에서 drop이 한 건이라도 있으면 validator가 실패한다. 현재 구현에서는 Scene Depth fallback을 사용하지 않았으며 실제 16-bit PNG 경로가 동작한다.
+## 더 확장해 본 부분
 
-## 학습용 데이터 내보내기
+핵심 수집과 재실행을 만든 뒤, 이 데이터가 실제로 어디까지 이어질 수 있는지도 작은 기능으로 확인했습니다.
 
-전체 episode를 검증한 뒤 human과 bot 데이터만 학습 인덱스로 내보낸다. input-replay는 원본 행동을 복제한 검증용 데이터이므로 기본 export에서 제외한다.
+### 사격 행동과 결과 연결
+
+한 번의 발사를 `fire -> shot -> hit 또는 miss` 순서의 사건으로 기록하고 같은 `shot_id`로 묶었습니다. 25개 발사 결과를 기록했고, 사격 입력을 다시 적용한 2건에서는 사건 순서와 결과까지 일치했습니다.
+
+### 학습용 데이터 인덱스
+
+모델을 학습하지는 않았지만 수집 결과를 그대로 넘기는 대신, frame `t`의 관측과 frame `t+1`에 적용한 행동, 그 결과인 frame `t+1` 상태를 하나의 transition으로 내보내는 exporter를 만들었습니다. 같은 코스가 train과 validation, test에 동시에 들어가지 않도록 course seed 단위로 나눕니다.
+
+현재 공개 manifest 기준으로 사람과 봇 53개 episode에서 8,895개 transition과 RGB와 Depth를 포함한 표본 1,827개를 만들었습니다. 기록한 입력을 다시 적용한 데이터는 원본 행동을 복제한 검증 자료이므로 기본 학습 인덱스에서 제외합니다.
+
+### 실제 게임 플레이 로그 구조 확인
+
+별도 실험으로 PUBG 공식 API의 telemetry를 내려받아 공격, 피해, knock, kill, 위치와 phase 정보를 익명 집계로 변환했습니다. API key와 원본 match ID, 사용자 식별자는 공개 파일에 남기지 않고 원본을 추적할 수 있는 hash만 보존합니다. 이 기능은 SimTrace 핵심 파이프라인과 분리되어 있으며, 실제 게임 데이터의 사건 구조를 살펴보기 위한 확장입니다.
+
+## 프로젝트 구조
+
+| 책임 | 파일 |
+|---|---|
+| 실행 옵션과 모드 | `SimTraceRuntimeConfig` |
+| seed 기반 코스 생성 | `SimTraceCourseLayout`, `SimTraceCourseActor` |
+| 입력과 1인칭 캐릭터 | `SimTraceCharacter`, `SimTracePlayerController` |
+| episode와 봇, 기록한 명령으로 다시 실행 | `SimTraceGameMode` |
+| 사격 결과 HUD | `SimTraceHUD` |
+| JSONL과 manifest | `EpisodeRecorderComponent` |
+| RGB와 Depth, 비동기 PNG 저장 | `SimTraceCaptureComponent` |
+| native Replay | `SimTraceGameInstance` |
+| 데이터 검증과 보고서 | `Scripts/validate_dataset.py` |
+| 학습용 transition export | `Scripts/export_ml_dataset.py` |
+| 캡처 성능 측정 | `Scripts/run_capture_benchmark.ps1` |
+| PUBG telemetry 변환 | `Scripts/pubg_telemetry.py` |
+| 공개 evidence 생성 | `Scripts/publish_evidence.py` |
+
+## 실행 방법
+
+### 요구 환경
+
+- Unreal Engine 5.8.1
+- Visual Studio Unreal C++ toolchain
+- PowerShell 7 또는 Windows PowerShell
+- Python 3.13과 `uv`
+- `ffmpeg`, `ffprobe`는 증거 영상을 다시 만들 때만 필요
+
+Python 환경을 만들고 Editor Development target을 빌드합니다.
 
 ```powershell
-uv run python Scripts/export_ml_dataset.py export `
-  Saved/SimTrace/episodes `
-  --output Saved/SimTrace/ml_dataset
-
-uv run python Scripts/export_ml_dataset.py inspect `
-  Saved/SimTrace/ml_dataset
+uv sync --python 3.13
+powershell -ExecutionPolicy Bypass -File Scripts/build.ps1
 ```
 
-출력은 이미지를 복사하지 않는 JSONL 인덱스다.
+Unreal 설치 위치가 다르면 `-EngineRoot`로 지정할 수 있습니다.
 
-```text
-Saved/SimTrace/ml_dataset/
-  dataset.json
-  transitions.jsonl
-  sensor_policy.jsonl
+```powershell
+powershell -ExecutionPolicy Bypass -File Scripts/build.ps1 `
+  -EngineRoot "D:\Epic\UE_5.8"
 ```
 
-exporter는 세 파일을 임시 형제 디렉터리에 먼저 만들고 JSONL record 수, SHA-256, 원본 episode manifest 집합 hash를 검증한 뒤 디렉터리 단위로 교체한다. 중단된 재실행이 이전 `dataset.json`과 새 JSONL을 섞는 것을 막으며, 원본 episode가 바뀌거나 partial manifest가 남으면 `inspect`와 공개 증거 발행도 실패한다.
+봇 수집을 한 번 실행하는 가장 짧은 명령은 다음과 같습니다.
 
-같은 frame의 PostPhysics 관측과 이미지를 그 frame에 이미 적용된 입력의 원인처럼 묶지 않는다. 각 transition은 frame `t`의 관측, frame `t+1`에 PrePhysics로 주입된 행동, 그 결과인 frame `t+1`의 PostPhysics 상태를 연결한다. train, validation, test는 episode가 아니라 course seed 단위로 나눠 같은 코스가 서로 다른 split에 들어가는 누수를 막는다.
+```powershell
+powershell -ExecutionPolicy Bypass -File Scripts/run_simtrace.ps1 `
+  -Mode bot `
+  -Seed 1000 `
+  -BatchCount 1 `
+  -Capture 1 `
+  -Headless
+```
 
-`inspect`는 첫 RGB와 Depth를 실제로 열어 shape와 dtype을 확인한다. 현재 export는 53개 human/bot episode에서 8,895개 transition과 1,827개 RGB/Depth 정책 학습 표본을 만든다.
+<details>
+<summary>사람 플레이와 기록한 입력으로 다시 실행</summary>
 
-## 검증과 보고서
+사람 플레이를 실행합니다.
 
-전체 데이터 계약을 검사한다.
+```powershell
+powershell -ExecutionPolicy Bypass -File Scripts/run_simtrace.ps1 `
+  -Mode human `
+  -Seed 1000 `
+  -BatchCount 10 `
+  -Capture 1
+```
+
+| 입력 | 동작 |
+|---|---|
+| W, A, S, D | 이동 |
+| 마우스 | 시점 |
+| 마우스 왼쪽 버튼 | hitscan 한 발 발사 |
+| Space | 점프 |
+| R | 현재 episode 종료 후 다음 seed 시작 |
+| Esc | 프로그램 종료 |
+
+기록한 입력을 같은 환경에 다시 적용합니다.
+
+```powershell
+$trajectory = Resolve-Path `
+  "Saved\SimTrace\episodes\<source-episode>\trajectory.jsonl"
+
+powershell -ExecutionPolicy Bypass -File Scripts/run_simtrace.ps1 `
+  -Mode input-replay `
+  -InputPath $trajectory `
+  -Capture 0 `
+  -Headless
+```
+
+</details>
+
+<details>
+<summary>native Replay와 캡처 성능 측정</summary>
+
+manifest의 `replay_name`으로 Unreal native Replay를 실행합니다.
+
+```powershell
+powershell -ExecutionPolicy Bypass -File Scripts/run_simtrace.ps1 `
+  -Mode native-replay `
+  -ReplayName "simtrace_<episode-id>"
+```
+
+같은 seed의 capture off와 on을 한 쌍으로 만들고 순서를 교차해 실행합니다.
+
+```powershell
+powershell -ExecutionPolicy Bypass `
+  -File Scripts/run_capture_benchmark.ps1 `
+  -PairCount 10 `
+  -StartSeed 6000
+```
+
+</details>
+
+## 검증과 테스트
+
+전체 데이터 계약을 검사하고 원본과 다시 실행한 결과를 비교합니다.
 
 ```powershell
 uv run python Scripts/validate_dataset.py validate `
   Saved/SimTrace/episodes
-```
 
-원본과 JSON 입력 재생을 직접 비교한다.
-
-```powershell
 uv run python Scripts/validate_dataset.py compare `
   Saved/SimTrace/episodes/<original-episode> `
   Saved/SimTrace/episodes/<replayed-episode>
-```
 
-요약과 그래프를 생성한다.
-
-```powershell
 uv run python Scripts/validate_dataset.py report `
   Saved/SimTrace/episodes
 ```
 
-출력은 `Saved/SimTrace/reports`에 생성된다.
-
-- `summary.json`
-- `summary.md`
-- `episode_sizes.png`
-- `episode_outcomes.png`
-- `action_distributions.png`
-- `combat_ledger.png`
-- `replay_error.png`
-- `capture_performance.png`
-
-검증된 결과에서 저장소용 소형 증거 번들을 갱신한다.
-
-```powershell
-uv run python Scripts/publish_evidence.py
-```
-
-이 명령은 대표 manifest, trajectory 발췌, RGB와 16-bit Depth 원본,
-native Replay archive, 보고서와 정확히 60초인 MP4를 `docs/evidence`에
-생성한다. 영상은 실제 수집 RGB 프레임과 실제 보고서만 사용하며 `ffprobe`로
-길이를 검사한다.
-
-validator는 다음을 실패로 처리한다.
-
-- partial manifest 또는 완료 flag 오류
-- 필수 provenance와 센서 계약 누락
-- sim frame 중복, 역순, 누락
-- 30 Hz timestamp 불일치
-- RGB와 Depth pair 누락
-- 잘못된 크기, bit depth, PNG color type
-- orphan 이미지
-- capture drop
-- 마지막 `done=true` 누락
-- manifest와 실제 frame, 파일 수, byte 수 불일치
-- native Replay archive 누락
-- JSON 재생의 잘못된 부모 또는 frame 정렬
-- `fire → shot → hit/miss` 사건 순서, shot ID 또는 manifest 집계 불일치
-- JSON 재생의 사격 action과 outcome 원장 불일치
-- 등록형 성능 벤치마크의 pair 순서, seed, capture 조건 또는 episode ID 불일치
-
-## 테스트
-
-Python 단위 테스트를 실행한다.
+Python 회귀 테스트를 실행합니다.
 
 ```powershell
 uv run python -m unittest discover -s Scripts/tests -t .
 ```
 
-Unreal Automation Tests를 실행한다.
+Unreal Automation Tests를 실행합니다.
 
 ```powershell
 & "C:\Program Files\Epic Games\UE_5.8\Engine\Binaries\Win64\UnrealEditor-Cmd.exe" `
@@ -485,52 +308,31 @@ Unreal Automation Tests를 실행한다.
   '-TestExit=Automation Test Queue Empty'
 ```
 
-테스트 범위는 다음과 같다.
+## 공개 검증 자료
 
-- 같은 seed의 course hash, 시작과 목표 일치
-- 다른 seed의 코스 변화
-- trajectory JSON 직렬화
-- 런타임 fire mapping, HUD class와 사격 원장 직렬화
-- 30 Hz timestamp
-- 실행 옵션 parsing과 안전한 clamp
-- Depth uint16 변환과 saturation
-- episode 데이터 계약
-- RGB와 Depth 누락 감지
-- total byte 교차 검사
-- manifest total byte 자릿수 경계 수렴
-- JSON 재생 부모와 전체 frame 정렬
-- JSON 재생의 exact combat event 비교
-- 1 cm 경로 교란을 검출하는 replay 반례
-- frame `t` 관측과 frame `t+1` 행동의 causal export 정렬
-- course seed 단위 split과 input-replay 기본 제외
-- 등록형 capture 실험의 교차 순서와 UTF-8 metadata
-- PUBG telemetry gzip, 공식 CDN, KillV2 거리, 익명 집계와 재귀 공개 whitelist
-- 상수에 가까운 행동값의 report 생성
-- 대응 seed 성능 비교에서 잘못된 mode와 미등록 episode 제외
+전체 `Saved/SimTrace` 데이터는 용량과 개인 로컬 경로 때문에 Git에서 제외했습니다. 대신 validator를 통과한 대표 episode와 보고서, 원본 파일의 hash를 [`docs/evidence`](docs/evidence)에 보존합니다. 공개 표본은 Git revision `ad1c6bff321f`에서 수집했습니다.
 
-## 60초 증거 영상
+- [60초 실제 데이터 증거 영상](docs/evidence/simtrace_demo.mp4)
+- [검증 결과 전체](docs/evidence/reports/summary.md)
+- [대표 RGB 원본](docs/evidence/sample/rgb.png)
+- [16비트 Depth 원본](docs/evidence/sample/depth.png)
+- [Unreal native Replay archive](docs/evidence/sample/native_replay.replay)
+- [학습용 데이터 요약](docs/evidence/ml_dataset_manifest.json)
+- [익명 PUBG telemetry 집계](docs/evidence/pubg/0340a0db4df30089.json)
 
-[`docs/evidence/simtrace_demo.mp4`](docs/evidence/simtrace_demo.mp4)는
-`Scripts/publish_evidence.py`가 실제 수집 결과에서 생성한다.
+## 현재 범위와 한계
 
-| 시간 | 화면 |
-|---|---|
-| 0초에서 5초 | 프로젝트와 측정 commit |
-| 5초에서 45초 | C++ 런타임 코스의 실제 봇 RGB |
-| 45초에서 50초 | 같은 sim frame의 RGB와 16-bit Depth |
-| 50초에서 55초 | JSON 입력 재생 위치 오차 |
-| 55초에서 60초 | 유효 episode, drop과 replay 결과 |
+- 데이터 생성, 재실행과 검증을 다루며 강화학습이나 모델 학습은 구현하지 않았습니다.
+- 봇은 학습된 AI가 아니라 waypoint와 전방 Ray Cast를 사용하는 규칙 기반 봇입니다.
+- exact 경로 일치는 같은 Engine 버전과 Git revision에서 검증한 결과이며, 다른 PC 사이의 결정성은 아직 확인하지 않았습니다.
+- 환경은 데이터 흐름을 검증하기 위한 단순한 사격장입니다. 실제 게임 수준의 복잡한 맵과 물리 상호작용은 다루지 않았습니다.
+- 전체 수집 데이터 대신 재현 가능한 대표 표본과 검증 보고서만 저장소에 공개했습니다.
 
-현재 저장된 MP4는 재현 가능한 자동 증거 영상이다. 면접용 라이브 화면에서는
-사람 조작 실행을 별도로 녹화하고 자동 증거 영상과 구분해 표시한다.
-
-## 공식 API 기준
+## 참고한 공식 문서
 
 - [Enhanced Input](https://dev.epicgames.com/documentation/unreal-engine/enhanced-input-in-unreal-engine)
 - [SceneCaptureComponent2D](https://dev.epicgames.com/documentation/en-us/unreal-engine/API/Runtime/Engine/USceneCaptureComponent2D)
 - [Replay System](https://dev.epicgames.com/documentation/en-us/unreal-engine/using-the-replay-system-in-unreal-engine)
 - [Automation Tests](https://dev.epicgames.com/documentation/unreal-engine/run-automation-tests-in-unreal-engine)
 - [PUBG Telemetry](https://documentation.pubg.com/en/telemetry.html)
-- [PUBG Telemetry Events](https://documentation.pubg.com/en/telemetry-events.html)
-- [PUBG API Keys](https://documentation.pubg.com/en/api-keys.html)
 - [PUBG API Terms](https://developer.pubg.com/tos?locale=en)
